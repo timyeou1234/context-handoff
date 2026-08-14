@@ -1,0 +1,34 @@
+{
+  "name": "context-handoff",
+  "version": "0.2.0",
+  "description": "Transfer long-running Codex work into a fresh verified thread without losing acceptance criteria or evidence.",
+  "author": {
+    "name": "Tim Yu",
+    "email": "timyeou1234@users.noreply.github.com",
+    "url": "https://github.com/timyeou1234"
+  },
+  "homepage": "https://github.com/timyeou1234/context-handoff",
+  "repository": "https://github.com/timyeou1234/context-handoff",
+  "license": "MIT",
+  "keywords": ["codex", "context", "handoff", "continuity", "productivity"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Context Handoff",
+    "shortDescription": "Continue long Codex work in a verified fresh thread",
+    "longDescription": "Checkpoint a long-running Codex task, preserve its goal, acceptance criteria, evidence, workspace identity, and open risks, then continue in a fresh thread only after a destination regression sentinel passes. Unsupported surfaces fall back to a validated recovery packet.",
+    "developerName": "Tim Yu",
+    "category": "Productivity",
+    "capabilities": ["Workflow", "Continuity"],
+    "websiteURL": "https://github.com/timyeou1234/context-handoff",
+    "privacyPolicyURL": "https://github.com/timyeou1234/context-handoff/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/timyeou1234/context-handoff/blob/main/TERMS.md",
+    "defaultPrompt": [
+      "Checkpoint this task and continue it in a fresh verified thread.",
+      "Prepare a safe handoff packet for this long-running Codex task.",
+      "Check context health and hand off only if a fresh thread is warranted."
+    ],
+    "brandColor": "#315C8C",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

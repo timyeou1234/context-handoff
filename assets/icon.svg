@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Context Handoff icon</title>
+  <rect width="128" height="128" rx="28" fill="#315C8C"/>
+  <path d="M29 40h48a11 11 0 0 1 11 11v37H40a11 11 0 0 1-11-11Z" fill="#F4F7FB"/>
+  <path d="M51 51h37a11 11 0 0 1 11 11v37H62a11 11 0 0 1-11-11Z" fill="#6F93BA" stroke="#315C8C" stroke-width="4"/>
+  <circle cx="91" cy="91" r="18" fill="#237A57" stroke="#F4F7FB" stroke-width="4"/>
+  <path d="m83 91 6 6 11-13" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+</svg>
