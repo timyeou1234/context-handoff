@@ -35,6 +35,7 @@ TEMPLATE = """# Codex Context Handoff
 
 Created: [TODO: timestamp]
 Source thread: [TODO: identifier or unavailable]
+Source host: [TODO: identifier or unavailable]
 
 ## Goal
 
@@ -227,6 +228,33 @@ def template(args: argparse.Namespace) -> int:
     return 0
 
 
+def archive_plan(args: argparse.Namespace) -> int:
+    blockers: list[str] = []
+    if not args.destination_verified:
+        blockers.append("destination has not reported HANDOFF VERIFIED")
+    if args.unsafe:
+        blockers.extend(f"unsafe state: {reason}" for reason in args.unsafe)
+    if not args.packet_available:
+        blockers.append("validated recovery packet is unavailable")
+    if not args.source_thread_id or not args.source_host_id:
+        blockers.append("surface-provided source thread and host identifiers are required")
+    if not (args.authorized or args.standing_preference):
+        blockers.append("source archival is not authorized")
+    if not args.api_available:
+        blockers.append("thread archival API is unavailable; use manual archive fallback")
+
+    emit(
+        {
+            "archive": not blockers,
+            "blockers": blockers,
+            "decision": "archive-ready" if not blockers else "archive-skipped",
+            "source_host_id": args.source_host_id,
+            "source_thread_id": args.source_thread_id,
+        }
+    )
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
         description="Assess Codex context pressure and validate handoff packets."
@@ -257,6 +285,19 @@ def parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("packet")
     validate_parser.add_argument("--max-chars", type=int, default=12_000)
     validate_parser.set_defaults(run=validate)
+
+    archive_parser = commands.add_parser(
+        "archive-plan", help="check whether optional source archival is safe"
+    )
+    archive_parser.add_argument("--destination-verified", action="store_true")
+    archive_parser.add_argument("--packet-available", action="store_true")
+    archive_parser.add_argument("--source-thread-id")
+    archive_parser.add_argument("--source-host-id")
+    archive_parser.add_argument("--authorized", action="store_true")
+    archive_parser.add_argument("--standing-preference", action="store_true")
+    archive_parser.add_argument("--api-available", action="store_true")
+    archive_parser.add_argument("--unsafe", action="append", default=[])
+    archive_parser.set_defaults(run=archive_plan)
 
     return root
 

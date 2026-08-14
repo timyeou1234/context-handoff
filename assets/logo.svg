@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Context Handoff logo</title>
+  <desc id="desc">Two overlapping blue frames joined by a verified green bridge.</desc>
+  <rect width="512" height="512" rx="112" fill="#F4F7FB"/>
+  <path d="M96 148a36 36 0 0 1 36-36h156a36 36 0 0 1 36 36v156a36 36 0 0 1-36 36H132a36 36 0 0 1-36-36Z" fill="#315C8C"/>
+  <path d="M188 208a36 36 0 0 1 36-36h156a36 36 0 0 1 36 36v156a36 36 0 0 1-36 36H224a36 36 0 0 1-36-36Z" fill="#6F93BA" stroke="#F4F7FB" stroke-width="16"/>
+  <circle cx="340" cy="340" r="62" fill="#237A57" stroke="#F4F7FB" stroke-width="14"/>
+  <path d="m311 340 19 19 40-43" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+</svg>

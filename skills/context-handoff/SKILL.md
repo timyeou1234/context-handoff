@@ -17,6 +17,7 @@ This skill can act only during an active Codex turn. It is not a background daem
 - Do not switch while a mutation, test, build, upload, or destructive action is active; while dirty state is unknown; or before material evidence is recorded.
 - Redact credentials, tokens, personal data, and unrelated conversation content.
 - Keep the source thread and working state recoverable. Do not archive, delete, reset, stash, commit, or change branches merely to hand off.
+- Treat source-thread archival as an optional second phase, never part of transfer success. Archive means recoverable hiding, not deletion.
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
 
 ## 1. Assess context health
@@ -90,6 +91,8 @@ Use the available Codex thread-management capability. In the Codex app:
 
 If fresh-thread creation is unavailable, provide the validated packet path and a compact copyable prompt. State plainly that no automatic switch occurred.
 
+When the surface exposes the actual source thread and host identifiers, record them in the packet. Never guess or synthesize either identifier. Keep the validated recovery packet available until the destination handshake and any authorized archival attempt are complete.
+
 ## 5. Require the destination handshake
 
 The destination must:
@@ -102,3 +105,18 @@ The destination must:
 6. On a match, report `HANDOFF VERIFIED`, continue from `Next action`, and retain all originally required final gates.
 
 Never interpret a successful handshake as completion of the underlying task.
+
+## 6. Optionally archive the verified source
+
+Source task/chat archival is an optional, recoverable second phase. Codex surfaces may label the same thread-level object a task or a chat; use the surface's supported archival API for the real source identifier. Attempt it only when all of these conditions hold:
+
+1. The destination has reported `HANDOFF VERIFIED` for the packet's sentinel.
+2. No mutation, test, build, upload, or destructive action is active.
+3. The validated recovery packet still exists at its recorded path.
+4. The surface supplied the real `sourceThreadId` and `sourceHostId`.
+5. The user explicitly authorized archival for this handoff, or an applicable instruction records a clear standing preference to archive verified handoffs.
+6. A supported thread archival API is available.
+
+Use the thread-management capability to archive the exact source thread and describe the result as archived, never deleted. Do not archive on `HANDOFF REGRESSION`, failed or missing destination verification, unsafe state, missing identifiers, unavailable packet, unsupported APIs, or ambiguous authorization. If the API is unavailable, give the user the exact source thread identity and a manual archive instruction. If archival fails, report the failure truthfully; the already verified handoff remains successful.
+
+After the destination is verified and archival is complete, skipped, or declined, remove the temporary packet only when the user has authorized cleanup and another adequate recovery record remains. Otherwise disclose its path and retention status.
