@@ -1,4 +1,4 @@
 interface:
   display_name: "Context Handoff"
-  short_description: "Safely move long Codex work into a fresh thread"
-  default_prompt: "Use $context-handoff to checkpoint this task and continue it in a fresh verified thread."
+  short_description: "Detect context pressure and safely continue in a fresh thread"
+  default_prompt: "Use $context-handoff to assess this task, checkpoint it safely, and continue in a fresh verified thread when warranted."

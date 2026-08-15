@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -11,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills/context-handoff/scripts/context_handoff.py"
 MANIFEST = ROOT / ".codex-plugin/plugin.json"
 MARKETPLACE = ROOT / ".agents/plugins/marketplace.json"
+HOOKS_CONFIG = ROOT / "hooks/hooks.json"
+HOOK_SCRIPT = ROOT / "hooks/context_health.py"
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -19,6 +22,21 @@ def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
+    )
+
+
+def run_hook(
+    payload: dict[str, object], plugin_data: Path
+) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["PLUGIN_DATA"] = str(plugin_data)
+    return subprocess.run(
+        [sys.executable, str(HOOK_SCRIPT)],
+        input=json.dumps(payload),
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
     )
 
 
@@ -135,6 +153,7 @@ class ContextHandoffTests(unittest.TestCase):
         self.assertEqual(manifest["name"], "context-handoff")
         self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
         self.assertEqual(manifest["skills"], "./skills/")
+        self.assertGreaterEqual(tuple(map(int, manifest["version"].split("."))), (0, 3, 0))
         self.assertNotIn("apps", manifest)
         self.assertNotIn("mcpServers", manifest)
         for key in ("composerIcon", "logo"):
@@ -154,6 +173,102 @@ class ContextHandoffTests(unittest.TestCase):
         plugin_root = (ROOT / entry["source"]["path"]).resolve()
         self.assertEqual(plugin_root, ROOT.resolve())
         self.assertTrue((plugin_root / ".codex-plugin/plugin.json").is_file())
+
+    def test_plugin_bundles_compaction_lifecycle_hooks(self) -> None:
+        hooks = json.loads(HOOKS_CONFIG.read_text(encoding="utf-8"))["hooks"]
+        self.assertEqual(hooks["SessionStart"][0]["matcher"], "^compact$")
+        for event in ("SessionStart", "UserPromptSubmit", "SessionEnd"):
+            command = hooks[event][0]["hooks"][0]["command"]
+            self.assertIn("$PLUGIN_ROOT/hooks/context_health.py", command)
+        self.assertNotIn("Stop", hooks)
+
+    def test_hook_records_compactions_and_reminds_each_later_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            plugin_data = Path(directory)
+            compact = {
+                "session_id": "thread-sensitive-123",
+                "cwd": "/tmp/example",
+                "hook_event_name": "SessionStart",
+                "source": "compact",
+            }
+
+            first = run_hook(compact, plugin_data)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            first_output = json.loads(first.stdout)
+            first_context = first_output["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("recorded 1 compaction(s)", first_context)
+            self.assertIn("create or refresh a checkpoint", first_context)
+
+            prompt = run_hook(
+                {
+                    "session_id": "thread-sensitive-123",
+                    "cwd": "/tmp/example",
+                    "hook_event_name": "UserPromptSubmit",
+                    "turn_id": "turn-2",
+                    "prompt": "continue",
+                },
+                plugin_data,
+            )
+            prompt_context = json.loads(prompt.stdout)["hookSpecificOutput"][
+                "additionalContext"
+            ]
+            self.assertIn("At the start of this user turn", prompt_context)
+            self.assertIn("recorded 1 compaction(s)", prompt_context)
+
+            second = run_hook(compact, plugin_data)
+            second_context = json.loads(second.stdout)["hookSpecificOutput"][
+                "additionalContext"
+            ]
+            self.assertIn("recorded 2 compaction(s)", second_context)
+            self.assertIn("treat this as handoff-ready", second_context)
+
+            state_files = list((plugin_data / "context-health").glob("*.json"))
+            self.assertEqual(len(state_files), 1)
+            self.assertNotIn("thread-sensitive-123", state_files[0].name)
+            self.assertNotIn(
+                "thread-sensitive-123", state_files[0].read_text(encoding="utf-8")
+            )
+
+    def test_hook_keeps_sessions_separate_and_cleans_up_on_end(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            plugin_data = Path(directory)
+            base = {
+                "cwd": "/tmp/example",
+                "hook_event_name": "SessionStart",
+                "source": "compact",
+            }
+            run_hook({**base, "session_id": "session-a"}, plugin_data)
+            run_hook({**base, "session_id": "session-b"}, plugin_data)
+            self.assertEqual(
+                len(list((plugin_data / "context-health").glob("*.json"))), 2
+            )
+
+            ended = run_hook(
+                {
+                    "session_id": "session-a",
+                    "cwd": "/tmp/example",
+                    "hook_event_name": "SessionEnd",
+                    "reason": "other",
+                },
+                plugin_data,
+            )
+            self.assertEqual(ended.returncode, 0, ended.stderr)
+            self.assertEqual(json.loads(ended.stdout), {})
+            self.assertEqual(
+                len(list((plugin_data / "context-health").glob("*.json"))), 1
+            )
+
+            no_history = run_hook(
+                {
+                    "session_id": "session-never-compacted",
+                    "cwd": "/tmp/example",
+                    "hook_event_name": "UserPromptSubmit",
+                    "turn_id": "turn-1",
+                    "prompt": "hello",
+                },
+                plugin_data,
+            )
+            self.assertEqual(json.loads(no_history.stdout), {})
 
 
 if __name__ == "__main__":

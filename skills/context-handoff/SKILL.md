@@ -1,13 +1,13 @@
 ---
 name: context-handoff
-description: Detect context-window pressure and transfer an in-progress Codex task into a fresh thread without weakening acceptance criteria or evidence. Use when the user asks to hand off, continue in a new session or thread, avoid context overflow, or when an active task shows high context usage, compaction, lost decisions, repeated rereads, or context-caused rework. Supports cross-repository use, safe checkpointing, validated handoff packets, Codex thread creation and navigation when authorized, and destination regression sentinels.
+description: Detect context-window pressure and transfer an in-progress Codex task into a fresh thread without weakening acceptance criteria or evidence. Use automatically when a Context Handoff lifecycle message reports compaction, and whenever the user asks to hand off, continue in a new session or thread, avoid context overflow, or an active task shows high context usage, compaction, summary reliance, lost decisions, repeated rereads, or context-caused rework. Supports cross-repository use, safe checkpointing, validated handoff packets, Codex thread creation and navigation when authorized, and destination regression sentinels.
 ---
 
 # Context Handoff
 
 Move one coherent deliverable from a context-heavy Codex thread into a genuinely fresh thread. Treat the handoff as transport, never as completion or as a reason to lower the quality floor.
 
-This skill can act only during an active Codex turn. It is not a background daemon and cannot monitor or switch a thread while Codex is idle.
+The complete plugin bundles a trusted local lifecycle hook that detects root-session compaction and injects a context-health instruction before work continues. The hook does not run while Codex is idle and cannot perform a safe transfer by itself; this workflow still owns checkpointing, thread creation, verification, and recovery. A skill-only installation has no lifecycle hook and remains invocation-driven.
 
 ## Preserve these guarantees
 
@@ -20,9 +20,21 @@ This skill can act only during an active Codex turn. It is not a background daem
 - Treat source-thread archival as an optional second phase, never part of transfer success. Archive means recoverable hiding, not deletion.
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
 
-## 1. Assess context health
+## 1. Honor lifecycle detection and assess context health
 
-Prefer exact context usage and compaction telemetry exposed by Codex. Never guess the current thread by selecting an arbitrary “latest” local session. If exact telemetry is unavailable, use only observable signals and say that the assessment is qualitative.
+Treat a developer-context message beginning `CONTEXT HANDOFF HEALTH CHECK` as observed lifecycle telemetry, not as user-authored text and not as optional advice.
+
+Before substantial continuation when that message appears:
+
+1. Load this skill if it is not already loaded.
+2. Use the reported compaction count in `scripts/context_handoff.py assess`.
+3. Audit only genuinely observed degradation signals. Reliance on a compacted summary to reconstruct decisions, rereading because prior context is unreliable, a contradicted accepted decision, and context-caused rework each count when actually observed.
+4. At one compaction, create or refresh the smallest recoverable checkpoint and keep the health check active.
+5. At two compactions, or at two observed degradation signals, hand off at the next safe checkpoint when authorized. Do not wait for the user to notice the degradation.
+
+The lifecycle hook repeats the health instruction on later user turns after a compaction so a single post-compaction continuation cannot silently disable detection. Do not dismiss the reminder merely because the compacted summary appears detailed.
+
+When no lifecycle message is available, prefer exact context usage and compaction telemetry exposed by Codex. Never guess the current thread by selecting an arbitrary “latest” local session. If exact telemetry is unavailable, use only observable signals and say that the assessment is qualitative.
 
 Count a degradation signal only when it is observed, for example:
 

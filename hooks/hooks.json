@@ -1,0 +1,45 @@
+{
+  "description": "Detect context compaction and keep the safe handoff workflow active until continuity is restored.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^compact$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/context_health.py\"",
+            "commandWindows": "py -3 \"%PLUGIN_ROOT%\\hooks\\context_health.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking context continuity",
+            "additionalContextLimit": 900
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/context_health.py\"",
+            "commandWindows": "py -3 \"%PLUGIN_ROOT%\\hooks\\context_health.py\"",
+            "timeout": 5,
+            "additionalContextLimit": 900
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/hooks/context_health.py\"",
+            "commandWindows": "py -3 \"%PLUGIN_ROOT%\\hooks\\context_health.py\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
