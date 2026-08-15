@@ -41,6 +41,25 @@ def run_hook(
 
 
 class ContextHandoffTests(unittest.TestCase):
+    @staticmethod
+    def complete_packet(
+        text: str,
+        *,
+        reply_language: str = "Traditional Chinese (zh-Hant)",
+        locale: str = "Asia/Taipei",
+    ) -> str:
+        text = re.sub(
+            r"- Reply language: \[TODO:[^\]]*\]",
+            f"- Reply language: {reply_language}",
+            text,
+        )
+        text = re.sub(
+            r"- Locale or time zone: \[TODO:[^\]]*\]",
+            f"- Locale or time zone: {locale}",
+            text,
+        )
+        return re.sub(r"\[TODO:[^\]]*\]", "recorded", text)
+
     def decision(self, *arguments: str) -> str:
         result = run_cli("assess", *arguments)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -83,20 +102,64 @@ class ContextHandoffTests(unittest.TestCase):
             self.assertEqual(created.returncode, 0, created.stderr)
             self.assertNotEqual(run_cli("validate", str(packet)).returncode, 0)
 
-            completed = re.sub(
-                r"\[TODO:[^\]]*\]", "recorded", packet.read_text(encoding="utf-8")
-            )
+            completed = self.complete_packet(packet.read_text(encoding="utf-8"))
             packet.write_text(completed, encoding="utf-8")
             valid = run_cli("validate", str(packet))
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+
+    def test_packet_requires_communication_preferences(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            packet = Path(directory) / "handoff.md"
+            run_cli("template", "--output", str(packet))
+            completed = self.complete_packet(packet.read_text(encoding="utf-8"))
+            without_preferences = re.sub(
+                r"(?ms)^## Communication preferences\n.*?(?=^## )",
+                "",
+                completed,
+            )
+            packet.write_text(without_preferences, encoding="utf-8")
+            result = run_cli("validate", str(packet))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "missing or empty section: Communication preferences",
+                result.stdout,
+            )
+
+            packet.write_text(
+                completed.replace(
+                    "- Reply language: Traditional Chinese (zh-Hant)\n", ""
+                ),
+                encoding="utf-8",
+            )
+            missing_language = run_cli("validate", str(packet))
+            self.assertNotEqual(missing_language.returncode, 0)
+            self.assertIn(
+                "Communication preferences must include Reply language: <value>",
+                missing_language.stdout,
+            )
+
+    def test_packet_preserves_reply_language_and_locale_separately(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            packet = Path(directory) / "handoff.md"
+            run_cli("template", "--output", str(packet))
+            completed = self.complete_packet(
+                packet.read_text(encoding="utf-8"),
+                reply_language="Traditional Chinese (zh-Hant)",
+                locale="unspecified",
+            )
+            packet.write_text(completed, encoding="utf-8")
+            result = run_cli("validate", str(packet))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn(
+                "- Reply language: Traditional Chinese (zh-Hant)", completed
+            )
+            self.assertIn("- Locale or time zone: unspecified", completed)
 
     def test_probable_secret_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             packet = Path(directory) / "handoff.md"
             run_cli("template", "--output", str(packet))
-            completed = re.sub(
-                r"\[TODO:[^\]]*\]", "recorded", packet.read_text(encoding="utf-8")
-            )
+            completed = self.complete_packet(packet.read_text(encoding="utf-8"))
             completed += "\nBearer " + ("a" * 30) + "\n"
             packet.write_text(completed, encoding="utf-8")
             result = run_cli("validate", str(packet))
@@ -151,9 +214,12 @@ class ContextHandoffTests(unittest.TestCase):
     def test_plugin_manifest_and_assets_are_consistent(self) -> None:
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "context-handoff")
-        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertRegex(
+            manifest["version"], r"^\d+\.\d+\.\d+(?:\+[0-9A-Za-z.-]+)?$"
+        )
         self.assertEqual(manifest["skills"], "./skills/")
-        self.assertGreaterEqual(tuple(map(int, manifest["version"].split("."))), (0, 3, 0))
+        base_version = manifest["version"].split("+", 1)[0]
+        self.assertGreaterEqual(tuple(map(int, base_version.split("."))), (0, 3, 0))
         self.assertNotIn("apps", manifest)
         self.assertNotIn("mcpServers", manifest)
         for key in ("composerIcon", "logo"):

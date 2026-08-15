@@ -1,6 +1,6 @@
 # Context Handoff for Codex
 
-`context-handoff` is a Codex plugin and skill for moving an in-progress task into a genuinely fresh thread when context pressure threatens continuity. The complete plugin uses a local lifecycle hook to detect root-session compaction before the next model continuation, then the skill preserves acceptance criteria, verified evidence, workspace identity, open risks, and the next action instead of copying the full conversation.
+`context-handoff` is a Codex plugin and skill for moving an in-progress task into a genuinely fresh thread when context pressure threatens continuity. The complete plugin uses a local lifecycle hook to detect root-session compaction before the next model continuation, then the skill preserves the reply language, acceptance criteria, verified evidence, workspace identity, open risks, and the next action instead of copying the full conversation.
 
 The skill is designed to reduce token cost without lowering the quality floor. A destination thread must verify a small workspace and artifact sentinel before it continues. Any mismatch stops with `HANDOFF REGRESSION`.
 
@@ -12,6 +12,7 @@ The skill is designed to reduce token cost without lowering the quality floor. A
 - Creates checkpoints at 70% usage, one compaction, or one observed degradation signal.
 - Prepares a fresh-thread handoff at 85% usage, two compactions, two degradation signals, or an explicit request.
 - Defers transfer while mutations, tests, builds, uploads, or destructive actions are active.
+- Preserves the reply language across the fresh-thread handshake without inventing locale or time-zone preferences.
 - Validates required handoff sections, verification labels, size, and common secret patterns.
 - Uses a fresh Codex thread rather than a full-history fork when thread tools and authorization are available.
 - Falls back to a validated, copyable packet when automatic thread creation is unavailable.

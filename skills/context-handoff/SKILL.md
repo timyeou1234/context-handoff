@@ -19,6 +19,7 @@ The complete plugin bundles a trusted local lifecycle hook that detects root-ses
 - Keep the source thread and working state recoverable. Do not archive, delete, reset, stash, commit, or change branches merely to hand off.
 - Treat source-thread archival as an optional second phase, never part of transfer success. Archive means recoverable hiding, not deletion.
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
+- Preserve the reply language separately from locale or time zone. Use an explicit user preference when available; otherwise record the source thread's observed primary interaction language. Use `unspecified` only when no reliable signal exists, and never infer locale or time zone from language.
 
 ## 1. Honor lifecycle detection and assess context health
 
@@ -67,8 +68,9 @@ Finish the current atomic operation and collect only the state needed for contin
 1. Record the working directory and applicable instruction files.
 2. For Git work, record branch, HEAD, concise status, relevant changed paths, and a diff hash when useful. For non-Git work, record equivalent artifact identities and checksums.
 3. Record completed outputs and their exact evidence, including commands and result summaries. Do not paste full logs.
-4. Record open work, failed approaches that must not be repeated, active external state, and the single next action.
-5. Choose the smallest destination sentinel that can detect a bad transfer: workspace identity plus a focused state, artifact, or test check. Do not rerun unaffected suites merely for ceremony.
+4. Record the reply language and any explicit locale, time-zone, terminology, or formality preference needed for continuity.
+5. Record open work, failed approaches that must not be repeated, active external state, and the single next action.
+6. Choose the smallest destination sentinel that can detect a bad transfer: workspace identity plus a focused state, artifact, or test check. Do not rerun unaffected suites merely for ceremony.
 
 If a safe checkpoint cannot be reached, defer the handoff and continue only far enough to make the state recoverable.
 
@@ -110,11 +112,12 @@ When the surface exposes the actual source thread and host identifiers, record t
 The destination must:
 
 1. Read applicable global and repository instructions.
-2. Restate the goal, acceptance criteria, evidence boundary, and next action concisely.
-3. Compare path, branch, HEAD, status or artifact checksums with `Workspace identity`.
-4. Run every check in `Destination sentinel` and no unrelated regression suite.
-5. On a mismatch, stop before changing state and report `HANDOFF REGRESSION` with the exact discrepancy.
-6. On a match, report `HANDOFF VERIFIED`, continue from `Next action`, and retain all originally required final gates.
+2. Read `Communication preferences`, use its reply language immediately, and keep locale or time zone independent. Do not translate code, identifiers, commands, or artifact names unless requested.
+3. Restate the goal, acceptance criteria, evidence boundary, and next action concisely in the preserved reply language.
+4. Compare path, branch, HEAD, status or artifact checksums with `Workspace identity`.
+5. Run every check in `Destination sentinel` and no unrelated regression suite.
+6. On a mismatch, stop before changing state and report `HANDOFF REGRESSION` with the exact discrepancy.
+7. On a match, report `HANDOFF VERIFIED`, continue from `Next action`, and retain all originally required final gates.
 
 Never interpret a successful handshake as completion of the underlying task.
 

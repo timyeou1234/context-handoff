@@ -1,6 +1,6 @@
 {
   "name": "context-handoff",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Detect context compaction and transfer long-running Codex work into a fresh verified thread without losing acceptance criteria or evidence.",
   "author": {
     "name": "Tim Yu",
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Context Handoff",
     "shortDescription": "Detect context pressure and continue in a verified fresh thread",
-    "longDescription": "Detect compaction with a trusted local lifecycle hook, keep context-health review active on later turns, and safely checkpoint a long-running Codex task. Preserve its goal, acceptance criteria, evidence, workspace identity, and open risks, then continue in a fresh thread only after a destination regression sentinel passes.",
+    "longDescription": "Detect compaction with a trusted local lifecycle hook, keep context-health review active on later turns, and safely checkpoint a long-running Codex task. Preserve its goal, reply language, acceptance criteria, evidence, workspace identity, and open risks, then continue in a fresh thread only after a destination regression sentinel passes.",
     "developerName": "Tim Yu",
     "category": "Productivity",
     "capabilities": [

@@ -33,14 +33,21 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Expected result: No invented thread ID and no claim that a destination was opened.
 - Fixture: Run on a surface without thread creation tools.
 
-### 4. Verified packet rejects secrets before transfer
+### 4. Preserve reply language without inventing locale
+
+- Prompt: "請用繁體中文處理這個任務，並在 handoff 後繼續使用繁體中文；我的地區與時區未指定。"
+- Expected behavior: The packet records `Traditional Chinese (zh-Hant)` as the reply language and `unspecified` for locale or time zone. The destination uses Traditional Chinese for its handshake and continuation.
+- Expected result: Language continuity survives the fresh thread, while no locale or time zone is inferred from the language.
+- Fixture: Synthetic task text in Traditional Chinese; no locale or time-zone metadata.
+
+### 5. Verified packet rejects secrets before transfer
 
 - Prompt: "Create a handoff packet from this task; the notes accidentally contain a synthetic bearer token."
 - Expected behavior: Validation rejects the packet, identifies a probable secret, and stops before thread creation.
 - Expected result: A safe remediation request; no transfer until the secret is removed.
 - Fixture: Use `Bearer ` followed by 30 lowercase `a` characters as synthetic data.
 
-### 5. Authorized post-verification archival
+### 6. Authorized post-verification archival
 
 - Prompt: "After the destination is verified, archive this source thread. I authorize archival for this handoff."
 - Expected behavior: The skill retains the validated packet, captures only real surface-provided source thread/host IDs, waits for `HANDOFF VERIFIED`, confirms no active unsafe work, then calls the supported task/chat thread archival API.
