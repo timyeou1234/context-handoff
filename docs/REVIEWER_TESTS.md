@@ -4,6 +4,14 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 
 ## Positive cases
 
+### 0. Automatic compaction detection
+
+- Setup: Install the complete plugin, review and trust its hook definition, then start a fresh synthetic task.
+- Event: Deliver a `SessionStart` lifecycle event with `source: compact`, followed by a later user turn in the same session.
+- Expected behavior: Before substantive continuation, Codex receives `CONTEXT HANDOFF HEALTH CHECK` with one observed compaction. The later user turn receives the reminder again without incrementing the count.
+- Expected result: The skill runs deterministic assessment, creates or refreshes a checkpoint, and audits only observed degradation signals. A second compact event reports two compactions and makes an authorized task handoff-ready.
+- Privacy boundary: Local plugin state contains no prompt, response, transcript, path, or raw session identifier and is removed on `SessionEnd`.
+
 ### 1. Explicit handoff at a safe checkpoint
 
 - Prompt: "Use Context Handoff to move this completed documentation task into a fresh verified thread."
