@@ -13,6 +13,7 @@ from pathlib import Path
 REQUIRED_SECTIONS = (
     "Goal",
     "Acceptance criteria",
+    "Communication preferences",
     "Applicable constraints",
     "Workspace identity",
     "Completed and verified",
@@ -44,6 +45,11 @@ Source host: [TODO: identifier or unavailable]
 ## Acceptance criteria
 
 - [TODO: observable criterion]
+
+## Communication preferences
+
+- Reply language: [TODO: explicit preference, observed primary interaction language, or unspecified]
+- Locale or time zone: [TODO: explicit preference or unspecified; do not infer it from language]
 
 ## Applicable constraints
 
@@ -187,6 +193,13 @@ def validate(args: argparse.Namespace) -> int:
     open_items = sections.get("Unverified and open", "")
     if open_items and "UNVERIFIED" not in open_items:
         errors.append("Unverified and open must mark remaining items as UNVERIFIED")
+
+    communication = sections.get("Communication preferences", "")
+    for label in ("Reply language", "Locale or time zone"):
+        if communication and not re.search(
+            rf"(?mi)^\s*-\s*{re.escape(label)}\s*:\s*\S.+$", communication
+        ):
+            errors.append(f"Communication preferences must include {label}: <value>")
 
     for label, pattern in SECRET_PATTERNS:
         if pattern.search(text):

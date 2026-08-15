@@ -1,6 +1,6 @@
 # Context Handoff for Codex
 
-`context-handoff` is a Codex plugin and skill for moving an in-progress task into a genuinely fresh thread when context pressure threatens continuity. The complete plugin uses a local lifecycle hook to detect root-session compaction before the next model continuation, then the skill preserves acceptance criteria, verified evidence, workspace identity, open risks, and the next action instead of copying the full conversation.
+`context-handoff` is a Codex plugin and skill for moving an in-progress task into a genuinely fresh thread when context pressure threatens continuity. The complete plugin uses a local lifecycle hook to detect root-session compaction before the next model continuation, then the skill preserves the reply language, acceptance criteria, verified evidence, workspace identity, open risks, and the next action instead of copying the full conversation.
 
 The skill is designed to reduce token cost without lowering the quality floor. A destination thread must verify a small workspace and artifact sentinel before it continues. Any mismatch stops with `HANDOFF REGRESSION`.
 
@@ -12,6 +12,7 @@ The skill is designed to reduce token cost without lowering the quality floor. A
 - Creates checkpoints at 70% usage, one compaction, or one observed degradation signal.
 - Prepares a fresh-thread handoff at 85% usage, two compactions, two degradation signals, or an explicit request.
 - Defers transfer while mutations, tests, builds, uploads, or destructive actions are active.
+- Preserves the reply language across the fresh-thread handshake without inventing locale or time-zone preferences.
 - Validates required handoff sections, verification labels, size, and common secret patterns.
 - Uses a fresh Codex thread rather than a full-history fork when thread tools and authorization are available.
 - Falls back to a validated, copyable packet when automatic thread creation is unavailable.
@@ -59,6 +60,12 @@ For automatic switching after detection, add standing authorization to the appli
 Source task/chat archival is separately opt-in. Codex surfaces may call the source a task or chat; the skill uses the supported thread-level archival capability and the real surface-provided identity. It never runs on a regression, unsafe state, missing recovery packet, missing identifiers, unsupported API, or failed verification. On unsupported surfaces, the skill reports the source identity when available and leaves archival as a manual user action. Archival is recoverable and is never described as deletion.
 
 The deterministic preflight can be inspected with `scripts/context_handoff.py archive-plan`; it reports `archive-ready` only when verification, recovery, identifiers, authorization, safe state, and API availability all pass. The skill performs the actual archive through the surface's thread-management capability, not through this local script.
+
+## Release automation
+
+The `Package and release plugin` GitHub Actions workflow runs the test suite, verifies that a `v*` tag matches `.codex-plugin/plugin.json`, creates a complete top-level `context-handoff/` ZIP plus SHA-256 file, uploads both as workflow artifacts, and creates a GitHub Release for tag-triggered runs. It can also be started manually to build submission artifacts without creating a release.
+
+OpenAI Plugins Directory updates still require a new version in the OpenAI Platform submission portal. Policy attestations, review, and the post-approval Publish action are intentionally not automated.
 
 ## Contents
 
