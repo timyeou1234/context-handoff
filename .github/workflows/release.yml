@@ -1,0 +1,58 @@
+name: Package and release plugin
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify release version
+        id: metadata
+        shell: bash
+        run: |
+          plugin_version="$(python -c 'import json; print(json.load(open(".codex-plugin/plugin.json"))["version"])')"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${plugin_version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match plugin version ${plugin_version}" >&2
+            exit 1
+          fi
+          echo "version=${plugin_version}" >> "${GITHUB_OUTPUT}"
+      - name: Build deterministic plugin bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          git archive \
+            --format=zip \
+            --prefix=context-handoff/ \
+            --output="dist/context-handoff-plugin-v${{ steps.metadata.outputs.version }}.zip" \
+            "${GITHUB_SHA}"
+          cd dist
+          sha256sum "context-handoff-plugin-v${{ steps.metadata.outputs.version }}.zip" \
+            > "context-handoff-plugin-v${{ steps.metadata.outputs.version }}.zip.sha256"
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: context-handoff-plugin-v${{ steps.metadata.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Create GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

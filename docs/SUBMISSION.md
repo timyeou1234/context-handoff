@@ -27,6 +27,8 @@ Preserves the source thread's reply language through packet validation and the d
 
 ## USER-REQUIRED portal steps
 
+GitHub Actions can build the versioned ZIP and checksum and can publish the matching GitHub Release. The OpenAI Platform submission remains a separate reviewed workflow; this repository has no submission credential or supported public submission API.
+
 - Confirm Apps Management write access in the submitting OpenAI organization.
 - Complete and select the correct verified individual or business identity.
 - Review legal text and publisher identity with qualified counsel if required.

@@ -61,6 +61,12 @@ Source task/chat archival is separately opt-in. Codex surfaces may call the sour
 
 The deterministic preflight can be inspected with `scripts/context_handoff.py archive-plan`; it reports `archive-ready` only when verification, recovery, identifiers, authorization, safe state, and API availability all pass. The skill performs the actual archive through the surface's thread-management capability, not through this local script.
 
+## Release automation
+
+The `Package and release plugin` GitHub Actions workflow runs the test suite, verifies that a `v*` tag matches `.codex-plugin/plugin.json`, creates a complete top-level `context-handoff/` ZIP plus SHA-256 file, uploads both as workflow artifacts, and creates a GitHub Release for tag-triggered runs. It can also be started manually to build submission artifacts without creating a release.
+
+OpenAI Plugins Directory updates still require a new version in the OpenAI Platform submission portal. Policy attestations, review, and the post-approval Publish action are intentionally not automated.
+
 ## Contents
 
 - `skills/context-handoff/SKILL.md` — workflow and safety contract.
