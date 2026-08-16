@@ -50,9 +50,16 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 ### 6. Authorized post-verification archival
 
 - Prompt: "After the destination is verified, archive this source thread. I authorize archival for this handoff."
-- Expected behavior: The skill retains the validated packet, captures only real surface-provided source thread/host IDs, waits for `HANDOFF VERIFIED`, confirms no active unsafe work, then calls the supported task/chat thread archival API.
-- Expected result: The source is reported as archived (recoverable), not deleted; the successful handoff remains independently recorded.
+- Expected behavior: The skill records the source Goal as active, retains the validated packet, captures only real surface-provided source thread/host IDs, waits for `HANDOFF VERIFIED`, confirms no active unsafe work, then calls the supported task/chat thread archival API as the source coordinator's final state-changing action.
+- Expected result: The source is reported as archived (recoverable), not deleted, only after the tool response or read-back confirms it; the successful handoff remains independently recorded and the unfinished Goal cannot silently resume the source.
 - Fixture: A test surface exposing synthetic test thread IDs and a mock archival API.
+
+### 7. Standing archival preference and already-archived retry
+
+- Prompt: "My documented standing preference is to archive every verified handoff source. Retry safely if it is already archived."
+- Expected behavior: After `HANDOFF VERIFIED`, the skill accepts the standing preference, uses the real identifiers, and observes that the source is already archived without repeating a destructive action.
+- Expected result: Idempotent `SOURCE_ARCHIVED_CONFIRMED`; the task is described as archived, never deleted.
+- Fixture: A mock surface returning an already-archived state for synthetic IDs.
 
 ## Negative cases
 
@@ -71,5 +78,11 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 ### 3. Missing archival prerequisites or unsupported API
 
 - Prompt: "Archive the old thread" when verification is missing, IDs are unavailable, authorization is absent, the packet was removed, or the surface has no archival API.
-- Expected fallback: Do not archive. Identify each missing prerequisite and provide a manual archive instruction when the real source identity and UI are available.
+- Expected fallback: Do not archive. Report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, identify each missing prerequisite, warn that an active or unknown Goal may auto-resume, and provide a manual archive instruction when the real source identity and UI are available.
 - Why not complete: Archival is a separately authorized, post-verification, recoverable action and identifiers must never be invented.
+
+### 4. Archive failure after a verified handoff
+
+- Scenario: The destination reports `HANDOFF VERIFIED`, but the archival call fails or the archived state cannot be confirmed.
+- Expected fallback: Preserve the verified destination and recovery packet, report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, disclose the archive failure and auto-resume risk, and provide the manual fallback. Never claim shutdown.
+- Why not complete: A successful handoff and a confirmed source shutdown are separate evidence claims.

@@ -6,14 +6,16 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 
 - Name: Context Handoff
 - Category: Productivity
-- Short description: Detect context pressure and continue in a verified fresh thread.
-- Long description: Detect compaction with a trusted local lifecycle hook, keep context-health review active on later turns, and safely checkpoint a long-running Codex task. Preserve its goal, reply language, acceptance criteria, evidence, workspace identity, and open risks, then continue in a fresh thread only after a destination regression sentinel passes.
+- Short description: Continue work in fresh threads
+- Long description: Detect compaction with a trusted local lifecycle hook, keep context-health review active on later turns, and safely checkpoint a long-running Codex task. Preserve its goal, reply language, acceptance criteria, evidence, workspace identity, and open risks, then continue only after destination verification. Optionally archive the source after confirmation so an unfinished Goal cannot silently resume it.
 - Developer: Tim Yu
 - Website: https://github.com/timyeou1234/context-handoff
-- Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md
+- Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md (enter in the portal; the supported plugin manifest schema has no support URL field)
 - Privacy: https://github.com/timyeou1234/context-handoff/blob/main/PRIVACY.md
 - Terms: https://github.com/timyeou1234/context-handoff/blob/main/TERMS.md
-- Logo: `assets/logo.png` (square high-resolution PNG; `assets/logo.svg` is the editable source)
+- Directory logo: `assets/logo.png` (512 × 512 PNG; current portal minimum is 256 × 256)
+- Composer icon: `assets/icon.png` (256 × 256 PNG; current portal minimum is 48 × 48)
+- Editable logo source: `assets/logo.svg`
 
 ## Starter prompts
 
@@ -21,9 +23,9 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 2. Prepare a safe handoff packet for this long-running Codex task.
 3. Check context health and hand off only if a fresh thread is warranted.
 
-## Release notes — 0.3.1
+## Release notes — 0.3.2
 
-Preserves the source thread's reply language through packet validation and the destination handshake while keeping locale and time zone independent. Missing communication-preference fields now fail validation instead of allowing a fresh thread to silently change language. Existing compaction detection, evidence boundaries, safe fallback, and separately authorized post-verification source archival remain unchanged. No MCP server, hosted service, authentication, or reviewer credentials are used.
+Closes the source-task Goal lifecycle gap. Handoff packets now record the source Goal status, and an active or unknown Goal is never treated as stopped until post-verification archival is observed. Unsupported or failed archival reports `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, preserves the successful destination handoff, warns about auto-resume, and provides a manual fallback. Existing compaction detection, language continuity, evidence boundaries, authorization, and regression safety remain intact. No MCP server, hosted service, authentication, or reviewer credentials are used.
 
 ## USER-REQUIRED portal steps
 

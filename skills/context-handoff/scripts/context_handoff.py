@@ -16,6 +16,7 @@ REQUIRED_SECTIONS = (
     "Communication preferences",
     "Applicable constraints",
     "Workspace identity",
+    "Source lifecycle",
     "Completed and verified",
     "Unverified and open",
     "Failures and discarded approaches",
@@ -61,6 +62,12 @@ Source host: [TODO: identifier or unavailable]
 - Repository or artifact: [TODO: identity]
 - Branch and HEAD, or equivalent identity: [TODO: identity]
 - Working-state summary and hash when applicable: [TODO: state]
+
+## Source lifecycle
+
+- Goal status: [TODO: active, complete, blocked, none, or unknown]
+- Source archival authorization: [TODO: per-handoff, standing preference, declined, or unspecified]
+- Source closure status: [TODO: pending destination verification]
 
 ## Completed and verified
 
@@ -201,6 +208,26 @@ def validate(args: argparse.Namespace) -> int:
         ):
             errors.append(f"Communication preferences must include {label}: <value>")
 
+    lifecycle = sections.get("Source lifecycle", "")
+    for label in (
+        "Goal status",
+        "Source archival authorization",
+        "Source closure status",
+    ):
+        if lifecycle and not re.search(
+            rf"(?mi)^\s*-\s*{re.escape(label)}\s*:\s*\S.+$", lifecycle
+        ):
+            errors.append(f"Source lifecycle must include {label}: <value>")
+
+    goal_match = re.search(
+        r"(?mi)^\s*-\s*Goal status\s*:\s*(active|complete|blocked|none|unknown)\s*$",
+        lifecycle,
+    )
+    if lifecycle and not goal_match:
+        errors.append(
+            "Source lifecycle Goal status must be active, complete, blocked, none, or unknown"
+        )
+
     for label, pattern in SECRET_PATTERNS:
         if pattern.search(text):
             errors.append(f"probable secret detected: {label}")
@@ -243,7 +270,9 @@ def template(args: argparse.Namespace) -> int:
 
 def archive_plan(args: argparse.Namespace) -> int:
     blockers: list[str] = []
-    if not args.destination_verified:
+    if args.destination_regression:
+        blockers.append("destination reported HANDOFF REGRESSION")
+    elif not args.destination_verified:
         blockers.append("destination has not reported HANDOFF VERIFIED")
     if args.unsafe:
         blockers.extend(f"unsafe state: {reason}" for reason in args.unsafe)
@@ -251,18 +280,102 @@ def archive_plan(args: argparse.Namespace) -> int:
         blockers.append("validated recovery packet is unavailable")
     if not args.source_thread_id or not args.source_host_id:
         blockers.append("surface-provided source thread and host identifiers are required")
-    if not (args.authorized or args.standing_preference):
-        blockers.append("source archival is not authorized")
-    if not args.api_available:
-        blockers.append("thread archival API is unavailable; use manual archive fallback")
+    if not args.already_archived:
+        if not (args.authorized or args.standing_preference):
+            blockers.append("source archival is not authorized")
+        if not args.api_available:
+            blockers.append("thread archival API is unavailable; use manual archive fallback")
+        if not args.confirmation_available:
+            blockers.append("source archival cannot be confirmed on this surface")
+
+    goal_auto_resume_risk = args.goal_status in {"active", "unknown"}
+    archived_confirmed = args.already_archived and not blockers
+    if archived_confirmed:
+        decision = "archive-confirmed"
+        lifecycle_state = "SOURCE_ARCHIVED_CONFIRMED"
+    elif not blockers:
+        decision = "archive-ready"
+        lifecycle_state = "SOURCE_ARCHIVE_READY"
+    elif args.destination_verified and not args.destination_regression and goal_auto_resume_risk:
+        decision = "handoff-verified-source-still-active"
+        lifecycle_state = "HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE"
+    elif args.destination_verified and not args.destination_regression:
+        decision = "archive-skipped"
+        lifecycle_state = "DESTINATION_VERIFIED"
+    else:
+        decision = "archive-skipped"
+        lifecycle_state = "CHECKPOINTED"
 
     emit(
         {
-            "archive": not blockers,
+            "archive": not blockers and not archived_confirmed,
+            "archived_confirmed": archived_confirmed,
             "blockers": blockers,
-            "decision": "archive-ready" if not blockers else "archive-skipped",
+            "decision": decision,
+            "goal_auto_resume_risk": goal_auto_resume_risk,
+            "goal_status": args.goal_status,
+            "lifecycle_state": lifecycle_state,
+            "manual_fallback_required": bool(blockers and goal_auto_resume_risk),
             "source_host_id": args.source_host_id,
             "source_thread_id": args.source_thread_id,
+        }
+    )
+    return 0
+
+
+def archive_result(args: argparse.Namespace) -> int:
+    if args.destination_regression:
+        emit(
+            {
+                "archived_confirmed": False,
+                "decision": "archive-prohibited",
+                "failure": "destination reported HANDOFF REGRESSION",
+                "goal_status": args.goal_status,
+                "lifecycle_state": "CHECKPOINTED",
+                "manual_fallback_required": False,
+                "source_auto_resume_risk": args.goal_status in {"active", "unknown"},
+            }
+        )
+        return 0
+
+    if not args.destination_verified:
+        emit(
+            {
+                "archived_confirmed": False,
+                "decision": "archive-prohibited",
+                "failure": "destination has not reported HANDOFF VERIFIED",
+                "goal_status": args.goal_status,
+                "lifecycle_state": "CHECKPOINTED",
+                "manual_fallback_required": False,
+                "source_auto_resume_risk": args.goal_status in {"active", "unknown"},
+            }
+        )
+        return 0
+
+    archived_confirmed = args.archive_confirmed
+    source_auto_resume_risk = (
+        not archived_confirmed and args.goal_status in {"active", "unknown"}
+    )
+    failure = None if archived_confirmed else (
+        args.failure or "archived state was not confirmed"
+    )
+    emit(
+        {
+            "archived_confirmed": archived_confirmed,
+            "decision": (
+                "archive-confirmed"
+                if archived_confirmed
+                else "handoff-verified-source-still-active"
+            ),
+            "failure": failure,
+            "goal_status": args.goal_status,
+            "lifecycle_state": (
+                "SOURCE_ARCHIVED_CONFIRMED"
+                if archived_confirmed
+                else "HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE"
+            ),
+            "manual_fallback_required": not archived_confirmed,
+            "source_auto_resume_risk": source_auto_resume_risk,
         }
     )
     return 0
@@ -302,15 +415,40 @@ def parser() -> argparse.ArgumentParser:
     archive_parser = commands.add_parser(
         "archive-plan", help="check whether optional source archival is safe"
     )
-    archive_parser.add_argument("--destination-verified", action="store_true")
+    destination = archive_parser.add_mutually_exclusive_group()
+    destination.add_argument("--destination-verified", action="store_true")
+    destination.add_argument("--destination-regression", action="store_true")
     archive_parser.add_argument("--packet-available", action="store_true")
     archive_parser.add_argument("--source-thread-id")
     archive_parser.add_argument("--source-host-id")
+    archive_parser.add_argument(
+        "--goal-status",
+        choices=("active", "complete", "blocked", "none", "unknown"),
+        required=True,
+    )
     archive_parser.add_argument("--authorized", action="store_true")
     archive_parser.add_argument("--standing-preference", action="store_true")
     archive_parser.add_argument("--api-available", action="store_true")
+    archive_parser.add_argument("--confirmation-available", action="store_true")
+    archive_parser.add_argument("--already-archived", action="store_true")
     archive_parser.add_argument("--unsafe", action="append", default=[])
     archive_parser.set_defaults(run=archive_plan)
+
+    result_parser = commands.add_parser(
+        "archive-result", help="classify the observed source archival result"
+    )
+    result_destination = result_parser.add_mutually_exclusive_group()
+    result_destination.add_argument("--destination-verified", action="store_true")
+    result_destination.add_argument("--destination-regression", action="store_true")
+    result_parser.add_argument(
+        "--goal-status",
+        choices=("active", "complete", "blocked", "none", "unknown"),
+        required=True,
+    )
+    observed_result = result_parser.add_mutually_exclusive_group()
+    observed_result.add_argument("--archive-confirmed", action="store_true")
+    observed_result.add_argument("--failure")
+    result_parser.set_defaults(run=archive_result)
 
     return root
 
