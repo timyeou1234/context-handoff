@@ -18,6 +18,8 @@ The complete plugin bundles a trusted local lifecycle hook that detects root-ses
 - Redact credentials, tokens, personal data, and unrelated conversation content.
 - Keep the source thread and working state recoverable. Do not archive, delete, reset, stash, commit, or change branches merely to hand off.
 - Treat source-thread archival as an optional second phase, never part of transfer success. Archive means recoverable hiding, not deletion.
+- Do not treat “stop modifying” as source-task shutdown. An unfinished or unknown Goal can wake the source task again until archival is confirmed.
+- Never mark a Goal complete or blocked merely to stop a handoff source; Goal has no pause or transfer state.
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
 - Preserve the reply language separately from locale or time zone. Use an explicit user preference when available; otherwise record the source thread's observed primary interaction language. Use `unspecified` only when no reliable signal exists, and never infer locale or time zone from language.
 
@@ -70,7 +72,9 @@ Finish the current atomic operation and collect only the state needed for contin
 3. Record completed outputs and their exact evidence, including commands and result summaries. Do not paste full logs.
 4. Record the reply language and any explicit locale, time-zone, terminology, or formality preference needed for continuity.
 5. Record open work, failed approaches that must not be repeated, active external state, and the single next action.
-6. Choose the smallest destination sentinel that can detect a bad transfer: workspace identity plus a focused state, artifact, or test check. Do not rerun unaffected suites merely for ceremony.
+6. Inspect the source Goal with the supported Goal-status capability when available. Record `active`, `complete`, `blocked`, `none`, or `unknown`; never invent a state.
+7. Record per-handoff archival authorization, an applicable standing preference, or that archival is declined/unspecified.
+8. Choose the smallest destination sentinel that can detect a bad transfer: workspace identity plus a focused state, artifact, or test check. Do not rerun unaffected suites merely for ceremony.
 
 If a safe checkpoint cannot be reached, defer the handoff and continue only far enough to make the state recoverable.
 
@@ -103,6 +107,8 @@ Use the available Codex thread-management capability. In the Codex app:
 5. Stop substantial work in the source after the destination is created, preventing duplicate execution.
 6. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
 
+If the source Goal is `active` or `unknown`, the source remains a handoff coordinator only until the destination result and source-closure outcome are known. When the surface supports it, wait on or read the exact destination thread until it reports `HANDOFF VERIFIED` or `HANDOFF REGRESSION`; do not end the source lifecycle immediately after creation. The source must not resume repository work or claim that it has stopped merely because its current response ended.
+
 If fresh-thread creation is unavailable, provide the validated packet path and a compact copyable prompt. State plainly that no automatic switch occurred.
 
 When the surface exposes the actual source thread and host identifiers, record them in the packet. Never guess or synthesize either identifier. Keep the validated recovery packet available until the destination handshake and any authorized archival attempt are complete.
@@ -131,7 +137,19 @@ Source task/chat archival is an optional, recoverable second phase. Codex surfac
 4. The surface supplied the real `sourceThreadId` and `sourceHostId`.
 5. The user explicitly authorized archival for this handoff, or an applicable instruction records a clear standing preference to archive verified handoffs.
 6. A supported thread archival API is available.
+7. The API result or a supported read-back can confirm the archived state.
 
-Use the thread-management capability to archive the exact source thread and describe the result as archived, never deleted. Do not archive on `HANDOFF REGRESSION`, failed or missing destination verification, unsafe state, missing identifiers, unavailable packet, unsupported APIs, or ambiguous authorization. If the API is unavailable, give the user the exact source thread identity and a manual archive instruction. If archival fails, report the failure truthfully; the already verified handoff remains successful.
+For an `active` or `unknown` Goal, follow this lifecycle explicitly:
+
+`CHECKPOINTED → DESTINATION_VERIFIED → SOURCE_ARCHIVE_READY → SOURCE_ARCHIVED_CONFIRMED`
+
+1. Wait for the destination's explicit `HANDOFF VERIFIED`; thread creation alone is not verification.
+2. Run `archive-plan` with the recorded Goal status and all observed prerequisites.
+3. Use the thread-management capability to archive the exact source thread. Make this the source coordinator's final state-changing action because archival may interrupt its active turn.
+4. Classify the observed result with `archive-result`. Claim `SOURCE_ARCHIVED_CONFIRMED` only when the archival tool reports success or a supported read-back observes the source as archived. Treat an already-observed archived source as idempotent success.
+
+Do not archive on `HANDOFF REGRESSION`, failed or missing destination verification, unsafe state, missing identifiers, unavailable packet, unsupported APIs, unavailable confirmation, or ambiguous authorization. If any prerequisite or the archival attempt fails after a verified destination, report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, preserve the successful handoff, warn that an unfinished Goal may auto-resume, and give the exact manual archive fallback when the real identity is available. Never claim that the source is stopped before confirmation.
+
+Use a supported surface-provided interrupt operation only when it is part of the authorized recoverable archival flow. Do not invent a separate destructive shutdown. If archival succeeds but a later confirmation cannot be obtained, report the uncertainty rather than weakening the destination handoff.
 
 After the destination is verified and archival is complete, skipped, or declined, remove the temporary packet only when the user has authorized cleanup and another adequate recovery record remains. Otherwise disclose its path and retention status.

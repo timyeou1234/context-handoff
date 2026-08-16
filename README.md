@@ -17,6 +17,7 @@ The skill is designed to reduce token cost without lowering the quality floor. A
 - Uses a fresh Codex thread rather than a full-history fork when thread tools and authorization are available.
 - Falls back to a validated, copyable packet when automatic thread creation is unavailable.
 - Can optionally archive the source thread as a recoverable second phase, but only after `HANDOFF VERIFIED`, with real surface-provided IDs and explicit or standing user authorization.
+- Records the source Goal state and confirms source archival, preventing an unfinished Goal from silently auto-resuming after a verified handoff.
 
 The hook and skill run only during the Codex lifecycle; they do not run while Codex is idle. The hook detects and injects the health check, while the skill performs the safe checkpoint and verified transfer.
 
@@ -57,9 +58,17 @@ Use $context-handoff to checkpoint this task and continue it in a fresh verified
 
 For automatic switching after detection, add standing authorization to the applicable global `AGENTS.md`. Detection never bypasses a safe checkpoint or destination validation.
 
-Source task/chat archival is separately opt-in. Codex surfaces may call the source a task or chat; the skill uses the supported thread-level archival capability and the real surface-provided identity. It never runs on a regression, unsafe state, missing recovery packet, missing identifiers, unsupported API, or failed verification. On unsupported surfaces, the skill reports the source identity when available and leaves archival as a manual user action. Archival is recoverable and is never described as deletion.
+Source task/chat archival is separately opt-in. Codex surfaces may call the source a task or chat; the skill records whether its Goal is active, complete, blocked, absent, or unknown, then uses the supported thread-level archival capability and the real surface-provided identity. It never runs on a regression, unsafe state, missing recovery packet, missing identifiers, unsupported API, unavailable confirmation, or failed verification. On unsupported surfaces, the skill reports `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, warns that an unfinished Goal may auto-resume, identifies the source when available, and leaves archival as a manual user action. Archival is recoverable and is never described as deletion.
 
-The deterministic preflight can be inspected with `scripts/context_handoff.py archive-plan`; it reports `archive-ready` only when verification, recovery, identifiers, authorization, safe state, and API availability all pass. The skill performs the actual archive through the surface's thread-management capability, not through this local script.
+The deterministic preflight can be inspected with `scripts/context_handoff.py archive-plan`; it requires `--goal-status` and reports `archive-ready` only when verification, recovery, identifiers, authorization, safe state, API availability, and confirmation capability all pass. After the surface archival call, `archive-result` maps observed confirmation to `SOURCE_ARCHIVED_CONFIRMED`; failure or missing confirmation maps to `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`. The skill performs the actual archive through the surface's thread-management capability, not through this local script.
+
+```bash
+python3 skills/context-handoff/scripts/context_handoff.py archive-plan \
+  --destination-verified --packet-available \
+  --source-thread-id <real-id> --source-host-id <real-id> \
+  --goal-status active --authorized \
+  --api-available --confirmation-available
+```
 
 ## Release automation
 

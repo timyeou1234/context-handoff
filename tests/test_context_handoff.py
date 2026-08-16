@@ -58,6 +58,11 @@ class ContextHandoffTests(unittest.TestCase):
             f"- Locale or time zone: {locale}",
             text,
         )
+        text = re.sub(
+            r"- Goal status: \[TODO:[^\]]*\]",
+            "- Goal status: active",
+            text,
+        )
         return re.sub(r"\[TODO:[^\]]*\]", "recorded", text)
 
     def decision(self, *arguments: str) -> str:
@@ -155,6 +160,22 @@ class ContextHandoffTests(unittest.TestCase):
             )
             self.assertIn("- Locale or time zone: unspecified", completed)
 
+    def test_packet_requires_explicit_source_goal_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            packet = Path(directory) / "handoff.md"
+            run_cli("template", "--output", str(packet))
+            completed = self.complete_packet(packet.read_text(encoding="utf-8"))
+            packet.write_text(
+                completed.replace("- Goal status: active", "- Goal status: running"),
+                encoding="utf-8",
+            )
+            result = run_cli("validate", str(packet))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "Source lifecycle Goal status must be active, complete, blocked, none, or unknown",
+                result.stdout,
+            )
+
     def test_probable_secret_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             packet = Path(directory) / "handoff.md"
@@ -173,13 +194,17 @@ class ContextHandoffTests(unittest.TestCase):
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
+            "--goal-status", "active",
             "--authorized",
             "--api-available",
+            "--confirmation-available",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["decision"], "archive-ready")
         self.assertTrue(payload["archive"])
+        self.assertEqual(payload["lifecycle_state"], "SOURCE_ARCHIVE_READY")
+        self.assertTrue(payload["goal_auto_resume_risk"])
 
     def test_archive_plan_rejects_unverified_or_unsafe_handoff(self) -> None:
         result = run_cli(
@@ -187,17 +212,22 @@ class ContextHandoffTests(unittest.TestCase):
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
+            "--goal-status", "active",
             "--authorized",
             "--api-available",
+            "--confirmation-available",
             "--unsafe", "test is running",
         )
         payload = json.loads(result.stdout)
         self.assertEqual(payload["decision"], "archive-skipped")
         self.assertIn("destination has not reported HANDOFF VERIFIED", payload["blockers"])
         self.assertIn("unsafe state: test is running", payload["blockers"])
+        self.assertEqual(payload["lifecycle_state"], "CHECKPOINTED")
 
     def test_archive_plan_requires_real_ids_authorization_packet_and_api(self) -> None:
-        result = run_cli("archive-plan", "--destination-verified")
+        result = run_cli(
+            "archive-plan", "--destination-verified", "--goal-status", "active"
+        )
         payload = json.loads(result.stdout)
         self.assertFalse(payload["archive"])
         self.assertIn("validated recovery packet is unavailable", payload["blockers"])
@@ -210,6 +240,105 @@ class ContextHandoffTests(unittest.TestCase):
             "thread archival API is unavailable; use manual archive fallback",
             payload["blockers"],
         )
+        self.assertIn(
+            "source archival cannot be confirmed on this surface",
+            payload["blockers"],
+        )
+        self.assertEqual(
+            payload["decision"], "handoff-verified-source-still-active"
+        )
+        self.assertTrue(payload["manual_fallback_required"])
+
+    def test_archive_plan_never_closes_on_destination_regression(self) -> None:
+        result = run_cli(
+            "archive-plan",
+            "--destination-regression",
+            "--packet-available",
+            "--source-thread-id", "thread-real-123",
+            "--source-host-id", "host-real-456",
+            "--goal-status", "active",
+            "--authorized",
+            "--api-available",
+            "--confirmation-available",
+        )
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["archive"])
+        self.assertEqual(payload["lifecycle_state"], "CHECKPOINTED")
+        self.assertIn("destination reported HANDOFF REGRESSION", payload["blockers"])
+
+    def test_archive_plan_treats_observed_archive_as_idempotent_success(self) -> None:
+        result = run_cli(
+            "archive-plan",
+            "--destination-verified",
+            "--packet-available",
+            "--source-thread-id", "thread-real-123",
+            "--source-host-id", "host-real-456",
+            "--goal-status", "active",
+            "--already-archived",
+        )
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["archive"])
+        self.assertTrue(payload["archived_confirmed"])
+        self.assertEqual(payload["decision"], "archive-confirmed")
+        self.assertEqual(payload["lifecycle_state"], "SOURCE_ARCHIVED_CONFIRMED")
+
+    def test_archive_plan_accepts_documented_standing_preference(self) -> None:
+        result = run_cli(
+            "archive-plan",
+            "--destination-verified",
+            "--packet-available",
+            "--source-thread-id", "thread-real-123",
+            "--source-host-id", "host-real-456",
+            "--goal-status", "unknown",
+            "--standing-preference",
+            "--api-available",
+            "--confirmation-available",
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["archive"])
+        self.assertEqual(payload["decision"], "archive-ready")
+        self.assertTrue(payload["goal_auto_resume_risk"])
+
+    def test_archive_result_requires_observed_confirmation(self) -> None:
+        confirmed = run_cli(
+            "archive-result",
+            "--destination-verified",
+            "--goal-status", "active",
+            "--archive-confirmed",
+        )
+        confirmed_payload = json.loads(confirmed.stdout)
+        self.assertTrue(confirmed_payload["archived_confirmed"])
+        self.assertEqual(
+            confirmed_payload["lifecycle_state"], "SOURCE_ARCHIVED_CONFIRMED"
+        )
+        self.assertFalse(confirmed_payload["source_auto_resume_risk"])
+
+        failed = run_cli(
+            "archive-result",
+            "--destination-verified",
+            "--goal-status", "active",
+            "--failure", "archive API returned an error",
+        )
+        failed_payload = json.loads(failed.stdout)
+        self.assertFalse(failed_payload["archived_confirmed"])
+        self.assertEqual(
+            failed_payload["lifecycle_state"],
+            "HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE",
+        )
+        self.assertTrue(failed_payload["source_auto_resume_risk"])
+        self.assertEqual(failed_payload["failure"], "archive API returned an error")
+
+    def test_archive_result_never_claims_closure_on_regression(self) -> None:
+        result = run_cli(
+            "archive-result",
+            "--destination-regression",
+            "--goal-status", "active",
+            "--archive-confirmed",
+        )
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["archived_confirmed"])
+        self.assertEqual(payload["decision"], "archive-prohibited")
+        self.assertEqual(payload["lifecycle_state"], "CHECKPOINTED")
 
     def test_plugin_manifest_and_assets_are_consistent(self) -> None:
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -219,13 +348,21 @@ class ContextHandoffTests(unittest.TestCase):
         )
         self.assertEqual(manifest["skills"], "./skills/")
         base_version = manifest["version"].split("+", 1)[0]
-        self.assertGreaterEqual(tuple(map(int, base_version.split("."))), (0, 3, 0))
+        self.assertGreaterEqual(tuple(map(int, base_version.split("."))), (0, 3, 2))
         self.assertNotIn("apps", manifest)
         self.assertNotIn("mcpServers", manifest)
         for key in ("composerIcon", "logo"):
             asset = ROOT / manifest["interface"][key]
             self.assertTrue(asset.is_file(), f"missing {key}: {asset}")
+            png = asset.read_bytes()
+            self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+            width = int.from_bytes(png[16:20], "big")
+            height = int.from_bytes(png[20:24], "big")
+            minimum = 48 if key == "composerIcon" else 256
+            self.assertEqual(width, height, f"{key} must be square")
+            self.assertGreaterEqual(width, minimum, f"{key} is too small")
         self.assertLessEqual(len(manifest["interface"]["defaultPrompt"]), 3)
+        self.assertLessEqual(len(manifest["interface"]["shortDescription"]), 30)
         self.assertTrue(
             all(len(prompt) <= 128 for prompt in manifest["interface"]["defaultPrompt"])
         )
