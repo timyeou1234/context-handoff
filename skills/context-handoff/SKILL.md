@@ -101,11 +101,15 @@ Do not proceed if validation reports a missing section, placeholder, probable se
 Use the available Codex thread-management capability. In the Codex app:
 
 1. Resolve the current saved project with project listing. Use a projectless target only for a genuinely non-project task.
-2. Create a new project thread in the same local project environment. Do not create a worktree or branch solely for handoff.
-3. Put the complete validated packet inline in the initial prompt and include the backup path only as recovery information.
-4. Instruct the destination to run the handshake below before continuing.
-5. Stop substantial work in the source after the destination is created, preventing duplicate execution.
-6. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
+2. When the surface exposes the source thread's explicit current title, read and retain that exact title. Do not infer, summarize, or regenerate a replacement title.
+3. Create a new project thread in the same local project environment. Do not create a worktree or branch solely for handoff.
+4. After receiving the real destination thread ID, use the supported `set_thread_title` capability (or an equivalent supported thread-title operation) to assign the retained source title to the destination. Do this only when both the exact source title and title-management capability are available.
+5. Put the complete validated packet inline in the initial prompt and include the backup path only as recovery information.
+6. Instruct the destination to run the handshake below before continuing.
+7. Stop substantial work in the source after the destination is created, preventing duplicate execution.
+8. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
+
+Thread-title preservation is UX metadata, not a handoff safety invariant. If the source title cannot be read, title management is unavailable, or the title operation fails, leave a warning when possible and continue the existing destination handshake and verification. Do not treat title preservation failure as `HANDOFF REGRESSION`, and do not add source archival or deletion behavior.
 
 If the source Goal is `active` or `unknown`, the source remains a handoff coordinator only until the destination result and source-closure outcome are known. When the surface supports it, wait on or read the exact destination thread until it reports `HANDOFF VERIFIED` or `HANDOFF REGRESSION`; do not end the source lifecycle immediately after creation. The source must not resume repository work or claim that it has stopped merely because its current response ended.
 

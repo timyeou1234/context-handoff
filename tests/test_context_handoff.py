@@ -14,6 +14,7 @@ MANIFEST = ROOT / ".codex-plugin/plugin.json"
 MARKETPLACE = ROOT / ".agents/plugins/marketplace.json"
 HOOKS_CONFIG = ROOT / "hooks/hooks.json"
 HOOK_SCRIPT = ROOT / "hooks/context_health.py"
+SKILL = ROOT / "skills/context-handoff/SKILL.md"
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -175,6 +176,18 @@ class ContextHandoffTests(unittest.TestCase):
                 "Source lifecycle Goal status must be active, complete, blocked, none, or unknown",
                 result.stdout,
             )
+
+    def test_fresh_thread_title_preservation_is_best_effort_ux_metadata(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("source thread's explicit current title", skill)
+        self.assertIn("Do not infer, summarize, or regenerate a replacement title", skill)
+        self.assertIn("set_thread_title", skill)
+        self.assertIn("real destination thread ID", skill)
+        self.assertIn("Thread-title preservation is UX metadata, not a handoff safety invariant", skill)
+        self.assertIn("If the source title cannot be read", skill)
+        self.assertIn("title management is unavailable", skill)
+        self.assertIn("title operation fails", skill)
+        self.assertIn("Do not treat title preservation failure as `HANDOFF REGRESSION`", skill)
 
     def test_probable_secret_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
