@@ -59,6 +59,8 @@ Source host: [TODO: identifier or unavailable]
 ## Workspace identity
 
 - Path: [TODO: absolute path]
+- Source workspace kind: [TODO: saved checkout, Codex worktree, or projectless directory]
+- Destination compatibility: [TODO: exact source path must be selectable without elevated approval]
 - Repository or artifact: [TODO: identity]
 - Branch and HEAD, or equivalent identity: [TODO: identity]
 - Working-state summary and hash when applicable: [TODO: state]
@@ -207,6 +209,13 @@ def validate(args: argparse.Namespace) -> int:
             rf"(?mi)^\s*-\s*{re.escape(label)}\s*:\s*\S.+$", communication
         ):
             errors.append(f"Communication preferences must include {label}: <value>")
+
+    workspace = sections.get("Workspace identity", "")
+    for label in ("Path", "Source workspace kind", "Destination compatibility"):
+        if workspace and not re.search(
+            rf"(?mi)^\s*-\s*{re.escape(label)}\s*:\s*\S.+$", workspace
+        ):
+            errors.append(f"Workspace identity must include {label}: <value>")
 
     lifecycle = sections.get("Source lifecycle", "")
     for label in (

@@ -61,6 +61,13 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Expected result: Idempotent `SOURCE_ARCHIVED_CONFIRMED`; the task is described as archived, never deleted.
 - Fixture: A mock surface returning an already-archived state for synthetic IDs.
 
+### 8. Exact source-directory routing
+
+- Prompt: "Handoff this task while it is running in a Codex worktree. Do not ask me for extra filesystem approval."
+- Expected behavior: Before creating a destination, the skill verifies whether a fresh thread can be placed in the exact source working directory with ordinary permissions. The complete packet is supplied inline and the backup path is marked source-only.
+- Expected result: If exact placement is supported, the handoff proceeds normally. If it is not supported, no incompatible destination is created; the source reports `HANDOFF NEEDS COMPATIBLE WORKSPACE` and provides the validated copyable packet without requesting approval.
+- Fixture: A saved Git project whose source task is running from a distinct Codex worktree.
+
 ## Negative cases
 
 ### 1. Unsafe checkpoint
@@ -86,3 +93,9 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Scenario: The destination reports `HANDOFF VERIFIED`, but the archival call fails or the archived state cannot be confirmed.
 - Expected fallback: Preserve the verified destination and recovery packet, report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, disclose the archive failure and auto-resume risk, and provide the manual fallback. Never claim shutdown.
 - Why not complete: A successful handoff and a confirmed source shutdown are separate evidence claims.
+
+### 5. Destination cannot access the source worktree
+
+- Scenario: A destination starts in another checkout and an identity or recovery read would cross its workspace boundary.
+- Expected fallback: Stop immediately with `HANDOFF REGRESSION`, identify both paths, retain the source checkpoint and recovery packet, and provide the copyable fallback. Do not request approval and do not retry the blocked read.
+- Why not complete: Elevated approval cannot make a mismatched destination a verified continuation, and repeated prompts are a functional regression.

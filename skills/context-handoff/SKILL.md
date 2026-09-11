@@ -22,6 +22,7 @@ The complete plugin bundles a trusted local lifecycle hook that detects root-ses
 - Never mark a Goal complete or blocked merely to stop a handoff source; Goal has no pause or transfer state.
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
 - Preserve the reply language separately from locale or time zone. Use an explicit user preference when available; otherwise record the source thread's observed primary interaction language. Use `unspecified` only when no reliable signal exists, and never infer locale or time zone from language.
+- Never request, seek, or repeatedly retry elevated approval merely to let the destination read the source checkout, another worktree, or the backup packet. Workspace isolation is a routing constraint, not an authorization problem to push onto the user.
 
 ## 1. Honor lifecycle detection and assess context health
 
@@ -68,7 +69,7 @@ Exact repository rules or user instructions override these defaults. A high rati
 Finish the current atomic operation and collect only the state needed for continuity:
 
 1. Record the working directory and applicable instruction files.
-2. For Git work, record branch, HEAD, concise status, relevant changed paths, and a diff hash when useful. For non-Git work, record equivalent artifact identities and checksums.
+2. Record whether the source is using the saved checkout, a Codex worktree, or a projectless directory. For Git work, record branch, HEAD, concise status, relevant changed paths, and a diff hash when useful. For non-Git work, record equivalent artifact identities and checksums.
 3. Record completed outputs and their exact evidence, including commands and result summaries. Do not paste full logs.
 4. Record the reply language and any explicit locale, time-zone, terminology, or formality preference needed for continuity.
 5. Record open work, failed approaches that must not be repeated, active external state, and the single next action.
@@ -80,7 +81,7 @@ If a safe checkpoint cannot be reached, defer the handoff and continue only far 
 
 ## 3. Build and validate the packet
 
-Create a temporary Markdown backup outside the repository. Generate the required skeleton with:
+Create a temporary Markdown backup outside the repository. This file is source-side recovery state; the destination must receive the complete packet inline and must not need to read the backup path. Generate the required skeleton with:
 
 ```bash
 python3 <skill-dir>/scripts/context_handoff.py template --output <temporary-path>
@@ -100,12 +101,14 @@ Do not proceed if validation reports a missing section, placeholder, probable se
 
 Use the available Codex thread-management capability. In the Codex app:
 
-1. Resolve the current saved project with project listing. Use a projectless target only for a genuinely non-project task.
-2. Create a new project thread in the same local project environment. Do not create a worktree or branch solely for handoff.
-3. Put the complete validated packet inline in the initial prompt and include the backup path only as recovery information.
-4. Instruct the destination to run the handshake below before continuing.
-5. Stop substantial work in the source after the destination is created, preventing duplicate execution.
-6. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
+1. Resolve the current saved project with project listing and identify the source execution context. Use a projectless target only for a genuinely non-project task.
+2. Before creating anything, confirm that the thread-creation surface can place a fresh destination in the exact source working directory under ordinary permissions. Selecting the same saved project is not sufficient when the source is in a different worktree or checkout.
+3. If exact-directory placement is unavailable, do not create a destination that would need approval to cross the workspace boundary. Keep the source at its checkpoint, provide the complete validated packet as a copyable fallback, report `HANDOFF NEEDS COMPATIBLE WORKSPACE`, and state the source and available destination locations. Do not substitute a full-history fork merely to preserve directory access.
+4. Create the fresh destination only after the compatibility preflight passes. Do not create a worktree or branch solely for handoff.
+5. Put the complete validated packet inline in the initial prompt. Mention the backup path only as source-side recovery information and explicitly instruct the destination not to open it.
+6. Instruct the destination to run the handshake below before continuing.
+7. Stop substantial work in the source after the destination is created, preventing duplicate execution.
+8. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
 
 If the source Goal is `active` or `unknown`, the source remains a handoff coordinator only until the destination result and source-closure outcome are known. When the surface supports it, wait on or read the exact destination thread until it reports `HANDOFF VERIFIED` or `HANDOFF REGRESSION`; do not end the source lifecycle immediately after creation. The source must not resume repository work or claim that it has stopped merely because its current response ended.
 
@@ -120,9 +123,9 @@ The destination must:
 1. Read applicable global and repository instructions.
 2. Read `Communication preferences`, use its reply language immediately, and keep locale or time zone independent. Do not translate code, identifiers, commands, or artifact names unless requested.
 3. Restate the goal, acceptance criteria, evidence boundary, and next action concisely in the preserved reply language.
-4. Compare path, branch, HEAD, status or artifact checksums with `Workspace identity`.
+4. Compare its current path, branch, HEAD, status or artifact checksums with `Workspace identity` using only resources already available in its workspace. The inline packet is authoritative; do not open the source-side backup packet.
 5. Run every check in `Destination sentinel` and no unrelated regression suite.
-6. On a mismatch, stop before changing state and report `HANDOFF REGRESSION` with the exact discrepancy.
+6. On a mismatch or an unexpected permission boundary, stop before changing state and report `HANDOFF REGRESSION` with the exact discrepancy. Do not request approval and do not retry the blocked read from the destination.
 7. On a match, report `HANDOFF VERIFIED`, continue from `Next action`, and retain all originally required final gates.
 
 Never interpret a successful handshake as completion of the underlying task.

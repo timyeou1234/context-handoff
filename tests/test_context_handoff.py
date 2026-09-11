@@ -14,6 +14,7 @@ MANIFEST = ROOT / ".codex-plugin/plugin.json"
 MARKETPLACE = ROOT / ".agents/plugins/marketplace.json"
 HOOKS_CONFIG = ROOT / "hooks/hooks.json"
 HOOK_SCRIPT = ROOT / "hooks/context_health.py"
+SKILL = ROOT / "skills/context-handoff/SKILL.md"
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -159,6 +160,28 @@ class ContextHandoffTests(unittest.TestCase):
                 "- Reply language: Traditional Chinese (zh-Hant)", completed
             )
             self.assertIn("- Locale or time zone: unspecified", completed)
+
+    def test_packet_requires_workspace_routing_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            packet = Path(directory) / "handoff.md"
+            run_cli("template", "--output", str(packet))
+            completed = self.complete_packet(packet.read_text(encoding="utf-8"))
+            packet.write_text(
+                completed.replace("- Source workspace kind: recorded\n", ""),
+                encoding="utf-8",
+            )
+            result = run_cli("validate", str(packet))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "Workspace identity must include Source workspace kind: <value>",
+                result.stdout,
+            )
+
+    def test_skill_forbids_approval_retry_across_workspace_boundary(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("HANDOFF NEEDS COMPATIBLE WORKSPACE", skill)
+        self.assertIn("do not open the source-side backup packet", skill)
+        self.assertIn("Do not request approval and do not retry", skill)
 
     def test_packet_requires_explicit_source_goal_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

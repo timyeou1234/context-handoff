@@ -15,6 +15,8 @@ The skill is designed to reduce token cost without lowering the quality floor. A
 - Preserves the reply language across the fresh-thread handshake without inventing locale or time-zone preferences.
 - Validates required handoff sections, verification labels, size, and common secret patterns.
 - Uses a fresh Codex thread rather than a full-history fork when thread tools and authorization are available.
+- Preflights exact working-directory compatibility before creating a destination; another worktree or checkout is not treated as equivalent merely because it belongs to the same saved project.
+- Treats workspace isolation as a routing boundary: it never loops on approval requests to read the source checkout or source-side recovery packet.
 - Falls back to a validated, copyable packet when automatic thread creation is unavailable.
 - Can optionally archive the source thread as a recoverable second phase, but only after `HANDOFF VERIFIED`, with real surface-provided IDs and explicit or standing user authorization.
 - Records the source Goal state and confirms source archival, preventing an unfinished Goal from silently auto-resuming after a verified handoff.
@@ -61,6 +63,8 @@ For automatic switching after detection, add standing authorization to the appli
 Source task/chat archival is separately opt-in. Codex surfaces may call the source a task or chat; the skill records whether its Goal is active, complete, blocked, absent, or unknown, then uses the supported thread-level archival capability and the real surface-provided identity. It never runs on a regression, unsafe state, missing recovery packet, missing identifiers, unsupported API, unavailable confirmation, or failed verification. On unsupported surfaces, the skill reports `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, warns that an unfinished Goal may auto-resume, identifies the source when available, and leaves archival as a manual user action. Archival is recoverable and is never described as deletion.
 
 The deterministic preflight can be inspected with `scripts/context_handoff.py archive-plan`; it requires `--goal-status` and reports `archive-ready` only when verification, recovery, identifiers, authorization, safe state, API availability, and confirmation capability all pass. After the surface archival call, `archive-result` maps observed confirmation to `SOURCE_ARCHIVED_CONFIRMED`; failure or missing confirmation maps to `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`. The skill performs the actual archive through the surface's thread-management capability, not through this local script.
+
+Fresh-thread creation also has a workspace-routing preflight. If the surface cannot place the destination in the exact source directory without elevated approval—for example, when the source is in a different Codex worktree—the plugin leaves the source checkpoint intact and returns `HANDOFF NEEDS COMPATIBLE WORKSPACE` with a complete copyable packet. The temporary packet path is recovery information for the source only; the destination receives the packet inline and must not request approval to open that file or the source worktree.
 
 ```bash
 python3 skills/context-handoff/scripts/context_handoff.py archive-plan \
