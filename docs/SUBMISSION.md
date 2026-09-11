@@ -7,7 +7,7 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 - Name: Context Handoff
 - Category: Productivity
 - Short description: Continue work in fresh threads
-- Long description: Detect compaction with a trusted local lifecycle hook, keep context-health review active on later turns, and safely checkpoint a long-running Codex task. Preserve its goal, reply language, acceptance criteria, evidence, workspace identity, and open risks, then continue only after destination verification. Preflight exact workspace compatibility so isolated worktrees fail safely instead of repeatedly requesting approval.
+- Long description: Detect compaction with a trusted local lifecycle hook, then safely checkpoint and continue long-running Codex work in a fresh verified thread. Preserve language, acceptance criteria, evidence, workspace identity, and open risks. Preflight exact workspace compatibility to prevent approval loops, and verify a titled, pinned destination so handoffs remain discoverable from desktop and mobile.
 - Developer: Tim Yu
 - Website: https://github.com/timyeou1234/context-handoff
 - Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md (enter in the portal; the supported plugin manifest schema has no support URL field)
@@ -23,9 +23,9 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 2. Prepare a safe handoff packet for this long-running Codex task.
 3. Check context health and hand off only if a fresh thread is warranted.
 
-## Release notes — 0.3.3
+## Release notes — 0.3.4
 
-Prevents repeated approval prompts when a fresh destination cannot access the source task's exact checkout or Codex worktree. The workflow now records the source workspace kind, preflights exact-directory compatibility before creating a destination, supplies the complete packet inline, and treats the backup path as source-only recovery state. An incompatible route returns `HANDOFF NEEDS COMPATIBLE WORKSPACE`; an unexpected destination boundary returns `HANDOFF REGRESSION` without requesting or retrying elevated approval. Existing compaction detection, language continuity, evidence boundaries, source lifecycle handling, and archival safety remain intact. No MCP server, hosted service, authentication, or reviewer credentials are used.
+Makes fresh handoff destinations reliably discoverable in the Codex sidebar and on mobile Remote. The workflow assigns a concise `Handoff: <goal>` title, pins the exact returned thread, and verifies the same thread ID, host ID, and title in the pinned inventory before source archival. If that read-back fails, it reports `HANDOFF MOBILE VISIBILITY UNVERIFIED`, preserves the source, and returns the known destination identity. It also explains that local/worktree tasks require mobile Remote to connect to the same host. The 0.3.3 exact-workspace guard remains intact: incompatible routes never loop on elevated approval. No MCP server, hosted service, authentication, or reviewer credentials are used.
 
 ## USER-REQUIRED portal steps
 

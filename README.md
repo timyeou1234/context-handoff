@@ -17,6 +17,8 @@ The skill is designed to reduce token cost without lowering the quality floor. A
 - Uses a fresh Codex thread rather than a full-history fork when thread tools and authorization are available.
 - Preflights exact working-directory compatibility before creating a destination; another worktree or checkout is not treated as equivalent merely because it belongs to the same saved project.
 - Treats workspace isolation as a routing boundary: it never loops on approval requests to read the source checkout or source-side recovery packet.
+- Makes fresh destinations easier to find across desktop and mobile by assigning a concise handoff title, pinning the exact destination, and verifying its thread/host identity in the pinned list before source archival.
+- Reports `HANDOFF MOBILE VISIBILITY UNVERIFIED` and keeps the source recoverable when sidebar read-back fails; pinning does not replace connecting mobile Remote to the computer that hosts a local checkout or worktree.
 - Falls back to a validated, copyable packet when automatic thread creation is unavailable.
 - Can optionally archive the source thread as a recoverable second phase, but only after `HANDOFF VERIFIED`, with real surface-provided IDs and explicit or standing user authorization.
 - Records the source Goal state and confirms source archival, preventing an unfinished Goal from silently auto-resuming after a verified handoff.
@@ -66,9 +68,11 @@ The deterministic preflight can be inspected with `scripts/context_handoff.py ar
 
 Fresh-thread creation also has a workspace-routing preflight. If the surface cannot place the destination in the exact source directory without elevated approval—for example, when the source is in a different Codex worktree—the plugin leaves the source checkpoint intact and returns `HANDOFF NEEDS COMPATIBLE WORKSPACE` with a complete copyable packet. The temporary packet path is recovery information for the source only; the destination receives the packet inline and must not request approval to open that file or the source worktree.
 
+After creation, the plugin gives the destination a recognizable `Handoff: <goal>` title, pins the exact returned thread, and confirms the same thread ID, host ID, and title through the sidebar inventory. If that confirmation is unavailable, it reports `HANDOFF MOBILE VISIBILITY UNVERIFIED`, preserves the source, and returns every known destination identifier for manual recovery. Local and worktree tasks still require mobile Remote to connect to the same computer; the plugin does not silently move repository work into an incompatible projectless or cloud task. See the official [worktree and mobile Remote documentation](https://learn.chatgpt.com/en/docs/environments/git-worktrees) and [project/sidebar documentation](https://learn.chatgpt.com/en/docs/projects).
+
 ```bash
 python3 skills/context-handoff/scripts/context_handoff.py archive-plan \
-  --destination-verified --packet-available \
+  --destination-verified --destination-discoverable --packet-available \
   --source-thread-id <real-id> --source-host-id <real-id> \
   --goal-status active --authorized \
   --api-available --confirmation-available

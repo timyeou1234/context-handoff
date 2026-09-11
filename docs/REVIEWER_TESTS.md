@@ -68,6 +68,13 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Expected result: If exact placement is supported, the handoff proceeds normally. If it is not supported, no incompatible destination is created; the source reports `HANDOFF NEEDS COMPATIBLE WORKSPACE` and provides the validated copyable packet without requesting approval.
 - Fixture: A saved Git project whose source task is running from a distinct Codex worktree.
 
+### 9. Mobile/sidebar destination discoverability
+
+- Prompt: "Handoff this task and make sure I can find the destination from my phone."
+- Expected behavior: After destination creation, the skill assigns a concise `Handoff: <goal>` title, pins the exact returned thread, and reads the thread inventory to confirm the same thread ID, host ID, and title in the pinned list.
+- Expected result: Source archival is eligible only after both `HANDOFF VERIFIED` and exact discoverability confirmation. The source checkpoint records the destination identity.
+- Fixture: A mock Codex surface exposing thread creation, title, pin, and list APIs plus a connected local host.
+
 ## Negative cases
 
 ### 1. Unsafe checkpoint
@@ -99,3 +106,9 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Scenario: A destination starts in another checkout and an identity or recovery read would cross its workspace boundary.
 - Expected fallback: Stop immediately with `HANDOFF REGRESSION`, identify both paths, retain the source checkpoint and recovery packet, and provide the copyable fallback. Do not request approval and do not retry the blocked read.
 - Why not complete: Elevated approval cannot make a mismatched destination a verified continuation, and repeated prompts are a functional regression.
+
+### 6. Destination is not visible in the pinned inventory
+
+- Scenario: Creation succeeds, but title/pin mutation fails or the exact destination thread and host do not appear in the pinned read-back.
+- Expected fallback: Report `HANDOFF MOBILE VISIBILITY UNVERIFIED`, preserve the source and recovery packet, and provide the known destination title, thread ID, and host ID. Do not archive the source or claim that mobile can see it.
+- Why not complete: A created task is not a usable mobile handoff until its discoverability is verified. If the local host is disconnected from mobile Remote, state that external requirement instead of rerouting the work.

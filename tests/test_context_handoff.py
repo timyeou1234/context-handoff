@@ -183,6 +183,13 @@ class ContextHandoffTests(unittest.TestCase):
         self.assertIn("do not open the source-side backup packet", skill)
         self.assertIn("Do not request approval and do not retry", skill)
 
+    def test_skill_requires_verified_mobile_discoverability(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("Handoff: <short goal>", skill)
+        self.assertIn("pin that exact destination thread", skill)
+        self.assertIn("HANDOFF MOBILE VISIBILITY UNVERIFIED", skill)
+        self.assertIn("same thread ID, host ID, and title", skill)
+
     def test_packet_requires_explicit_source_goal_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             packet = Path(directory) / "handoff.md"
@@ -214,6 +221,7 @@ class ContextHandoffTests(unittest.TestCase):
         result = run_cli(
             "archive-plan",
             "--destination-verified",
+            "--destination-discoverable",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -249,7 +257,11 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_requires_real_ids_authorization_packet_and_api(self) -> None:
         result = run_cli(
-            "archive-plan", "--destination-verified", "--goal-status", "active"
+            "archive-plan",
+            "--destination-verified",
+            "--destination-discoverable",
+            "--goal-status",
+            "active",
         )
         payload = json.loads(result.stdout)
         self.assertFalse(payload["archive"])
@@ -293,6 +305,7 @@ class ContextHandoffTests(unittest.TestCase):
         result = run_cli(
             "archive-plan",
             "--destination-verified",
+            "--destination-discoverable",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -309,6 +322,7 @@ class ContextHandoffTests(unittest.TestCase):
         result = run_cli(
             "archive-plan",
             "--destination-verified",
+            "--destination-discoverable",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -320,6 +334,28 @@ class ContextHandoffTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertTrue(payload["archive"])
         self.assertEqual(payload["decision"], "archive-ready")
+
+    def test_archive_plan_keeps_source_when_mobile_visibility_is_unverified(self) -> None:
+        result = run_cli(
+            "archive-plan",
+            "--destination-verified",
+            "--packet-available",
+            "--source-thread-id",
+            "thread-real-123",
+            "--source-host-id",
+            "host-real-123",
+            "--goal-status",
+            "active",
+            "--authorized",
+            "--api-available",
+            "--confirmation-available",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["archive"])
+        self.assertEqual(
+            payload["lifecycle_state"], "HANDOFF MOBILE VISIBILITY UNVERIFIED"
+        )
         self.assertTrue(payload["goal_auto_resume_risk"])
 
     def test_archive_result_requires_observed_confirmation(self) -> None:

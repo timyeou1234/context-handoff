@@ -23,6 +23,8 @@ The complete plugin bundles a trusted local lifecycle hook that detects root-ses
 - Preserve any model or reasoning choice explicitly made by the user. Otherwise omit overrides in the destination.
 - Preserve the reply language separately from locale or time zone. Use an explicit user preference when available; otherwise record the source thread's observed primary interaction language. Use `unspecified` only when no reliable signal exists, and never infer locale or time zone from language.
 - Never request, seek, or repeatedly retry elevated approval merely to let the destination read the source checkout, another worktree, or the backup packet. Workspace isolation is a routing constraint, not an authorization problem to push onto the user.
+- Treat destination discoverability as part of a usable handoff. When the surface supports titles, sidebar pinning, and thread listing, give the destination a concise `Handoff: <goal>` title, pin the exact returned thread, and verify that exact thread and host in the pinned list before the source can be archived.
+- Do not imply that pinning can replace mobile Remote connectivity. A local checkout or worktree remains on its host; when mobile cannot reach that host, report the host requirement instead of rerouting a code task to an incompatible projectless or cloud workspace.
 
 ## 1. Honor lifecycle detection and assess context health
 
@@ -107,8 +109,11 @@ Use the available Codex thread-management capability. In the Codex app:
 4. Create the fresh destination only after the compatibility preflight passes. Do not create a worktree or branch solely for handoff.
 5. Put the complete validated packet inline in the initial prompt. Mention the backup path only as source-side recovery information and explicitly instruct the destination not to open it.
 6. Instruct the destination to run the handshake below before continuing.
-7. Stop substantial work in the source after the destination is created, preventing duplicate execution.
-8. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
+7. Give the exact returned destination thread a concise, recognizable title in the form `Handoff: <short goal>`. Preserve a user-supplied title when it is already equally clear.
+8. When supported, pin that exact destination thread to the sidebar, then read the thread inventory and verify the same thread ID, host ID, and title in the pinned list. Record those three values in the source checkpoint. Do not infer success from the mutation call alone.
+9. If naming, pinning, or read-back is unavailable or fails, keep the handoff destination and source recoverable, report `HANDOFF MOBILE VISIBILITY UNVERIFIED`, and provide the exact destination title, thread ID, and host ID that are actually known. Do not archive the source or claim mobile visibility.
+10. Stop substantial work in the source after the destination is created, preventing duplicate execution.
+11. Navigate to the destination only when the user's request or standing instructions explicitly authorize switching views.
 
 If the source Goal is `active` or `unknown`, the source remains a handoff coordinator only until the destination result and source-closure outcome are known. When the surface supports it, wait on or read the exact destination thread until it reports `HANDOFF VERIFIED` or `HANDOFF REGRESSION`; do not end the source lifecycle immediately after creation. The source must not resume repository work or claim that it has stopped merely because its current response ended.
 
@@ -135,23 +140,24 @@ Never interpret a successful handshake as completion of the underlying task.
 Source task/chat archival is an optional, recoverable second phase. Codex surfaces may label the same thread-level object a task or a chat; use the surface's supported archival API for the real source identifier. Attempt it only when all of these conditions hold:
 
 1. The destination has reported `HANDOFF VERIFIED` for the packet's sentinel.
-2. No mutation, test, build, upload, or destructive action is active.
-3. The validated recovery packet still exists at its recorded path.
-4. The surface supplied the real `sourceThreadId` and `sourceHostId`.
-5. The user explicitly authorized archival for this handoff, or an applicable instruction records a clear standing preference to archive verified handoffs.
-6. A supported thread archival API is available.
-7. The API result or a supported read-back can confirm the archived state.
+2. Destination discoverability was verified by exact thread and host identity, or the user explicitly declined mobile/sidebar discoverability for this handoff.
+3. No mutation, test, build, upload, or destructive action is active.
+4. The validated recovery packet still exists at its recorded path.
+5. The surface supplied the real `sourceThreadId` and `sourceHostId`.
+6. The user explicitly authorized archival for this handoff, or an applicable instruction records a clear standing preference to archive verified handoffs.
+7. A supported thread archival API is available.
+8. The API result or a supported read-back can confirm the archived state.
 
 For an `active` or `unknown` Goal, follow this lifecycle explicitly:
 
 `CHECKPOINTED → DESTINATION_VERIFIED → SOURCE_ARCHIVE_READY → SOURCE_ARCHIVED_CONFIRMED`
 
 1. Wait for the destination's explicit `HANDOFF VERIFIED`; thread creation alone is not verification.
-2. Run `archive-plan` with the recorded Goal status and all observed prerequisites.
+2. Run `archive-plan` with the recorded Goal status and all observed prerequisites, including `--destination-discoverable` only after exact sidebar read-back or an explicit discoverability opt-out.
 3. Use the thread-management capability to archive the exact source thread. Make this the source coordinator's final state-changing action because archival may interrupt its active turn.
 4. Classify the observed result with `archive-result`. Claim `SOURCE_ARCHIVED_CONFIRMED` only when the archival tool reports success or a supported read-back observes the source as archived. Treat an already-observed archived source as idempotent success.
 
-Do not archive on `HANDOFF REGRESSION`, failed or missing destination verification, unsafe state, missing identifiers, unavailable packet, unsupported APIs, unavailable confirmation, or ambiguous authorization. If any prerequisite or the archival attempt fails after a verified destination, report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, preserve the successful handoff, warn that an unfinished Goal may auto-resume, and give the exact manual archive fallback when the real identity is available. Never claim that the source is stopped before confirmation.
+Do not archive on `HANDOFF REGRESSION`, `HANDOFF MOBILE VISIBILITY UNVERIFIED`, failed or missing destination verification, unsafe state, missing identifiers, unavailable packet, unsupported APIs, unavailable confirmation, or ambiguous authorization. If discoverability alone is unverified, preserve both threads and report that state with the exact known destination identity. If another prerequisite or the archival attempt fails after a verified destination, report `HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE`, preserve the successful handoff, warn that an unfinished Goal may auto-resume, and give the exact manual archive fallback when the real identity is available. Never claim that the source is stopped before confirmation.
 
 Use a supported surface-provided interrupt operation only when it is part of the authorized recoverable archival flow. Do not invent a separate destructive shutdown. If archival succeeds but a later confirmation cannot be obtained, report the uncertainty rather than weakening the destination handoff.
 

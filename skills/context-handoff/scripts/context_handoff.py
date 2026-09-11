@@ -283,6 +283,8 @@ def archive_plan(args: argparse.Namespace) -> int:
         blockers.append("destination reported HANDOFF REGRESSION")
     elif not args.destination_verified:
         blockers.append("destination has not reported HANDOFF VERIFIED")
+    if not args.destination_discoverable:
+        blockers.append("destination mobile/sidebar discoverability is unverified")
     if args.unsafe:
         blockers.extend(f"unsafe state: {reason}" for reason in args.unsafe)
     if not args.packet_available:
@@ -305,6 +307,13 @@ def archive_plan(args: argparse.Namespace) -> int:
     elif not blockers:
         decision = "archive-ready"
         lifecycle_state = "SOURCE_ARCHIVE_READY"
+    elif (
+        args.destination_verified
+        and not args.destination_regression
+        and not args.destination_discoverable
+    ):
+        decision = "handoff-mobile-visibility-unverified"
+        lifecycle_state = "HANDOFF MOBILE VISIBILITY UNVERIFIED"
     elif args.destination_verified and not args.destination_regression and goal_auto_resume_risk:
         decision = "handoff-verified-source-still-active"
         lifecycle_state = "HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE"
@@ -427,6 +436,11 @@ def parser() -> argparse.ArgumentParser:
     destination = archive_parser.add_mutually_exclusive_group()
     destination.add_argument("--destination-verified", action="store_true")
     destination.add_argument("--destination-regression", action="store_true")
+    archive_parser.add_argument(
+        "--destination-discoverable",
+        action="store_true",
+        help="exact destination thread and host were confirmed in the pinned list, or the user explicitly opted out",
+    )
     archive_parser.add_argument("--packet-available", action="store_true")
     archive_parser.add_argument("--source-thread-id")
     archive_parser.add_argument("--source-host-id")
