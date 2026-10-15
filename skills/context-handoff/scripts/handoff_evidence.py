@@ -9,6 +9,73 @@ import re
 FIELDS = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens")
 
 
+class UsageLedger:
+    """Keep independent cumulative streams; the newer ledger includes compaction."""
+
+    def __init__(self, session_id):
+        self.session_id = session_id
+        self.streams = {}
+
+    def observe(self, event):
+        q = event.get("payload", {})
+        if not isinstance(q, dict):
+            return
+        if event.get("type") == "token_usage_record":
+            basis = "token_usage_record.thread_token_usage"
+            if not self.session_id or q.get("thread_id") != self.session_id:
+                raise ValueError("usage ledger session identity mismatch")
+            current = q.get("thread_token_usage")
+            if not isinstance(current, dict):
+                raise ValueError("missing cumulative usage ledger")
+        elif event.get("type") == "event_msg" and q.get("type") == "token_count":
+            basis = "event_msg.total_token_usage"
+            info = q.get("info")
+            current = info.get("total_token_usage") if isinstance(info, dict) else None
+            if not isinstance(current, dict):
+                return
+        else:
+            return
+        values = {k: current.get(k) for k in FIELDS}
+        if any(v is not None and (type(v) is not int or v < 0) for v in values.values()):
+            raise ValueError("invalid token counter")
+        previous = self.streams.get(basis, {})
+        high = dict(previous.get("high", {}))
+        if any(v is not None and v < high.get(k, 0) for k, v in values.items()):
+            raise ValueError("non-monotonic token counters")
+        high.update({k: v for k, v in values.items() if v is not None})
+        inp, cache, output, reasoning, total = (values[k] for k in
+            ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens"))
+        if inp is not None and cache is not None and cache > inp:
+            raise ValueError("cached input exceeds input")
+        if output is not None and reasoning is not None and reasoning > output:
+            raise ValueError("reasoning exceeds output")
+        if all(v is not None for v in (inp, output, total)) and inp + output != total:
+            raise ValueError("inconsistent total")
+        self.streams[basis] = {"usage": values, "high": high, "cutoff": event.get("timestamp"),
+            "advances": previous.get("advances", 0) + (previous.get("usage") != values)}
+
+    def result(self, compactions):
+        basis = "token_usage_record.thread_token_usage"
+        if basis not in self.streams:
+            basis = "event_msg.total_token_usage"
+            if compactions:
+                raise ValueError("compaction accounting unavailable in legacy telemetry")
+        if basis not in self.streams:
+            raise ValueError("no usage telemetry")
+        selected = self.streams[basis]
+        values = dict(selected["usage"])
+        legacy = self.streams.get("event_msg.total_token_usage", {}).get("usage", {})
+        # Never silently report a stale ledger after a producer switches formats.
+        if basis.startswith("token_usage_record") and any(
+            legacy.get(k) is not None and values[k] is not None and legacy[k] > values[k]
+            for k in FIELDS
+        ):
+            raise ValueError("legacy counters exceed cumulative ledger; incomplete telemetry")
+        inp, cache = values["input_tokens"], values["cached_input_tokens"]
+        values["uncached_input_tokens"] = inp - cache if inp is not None and cache is not None else None
+        return values, selected["cutoff"], selected["advances"], basis
+
+
 def locate(path, session_id):
     path = Path(path).expanduser().resolve()
     if not path.exists():
@@ -48,16 +115,13 @@ def objects(value):
 
 def snapshot(path, session_id, until=None):
     path = locate(path, session_id)
-    latest = None
-    highwater = {}
-    sample_at = None
+    ledger = UsageLedger(session_id)
     complete_at = None
     model = None
     effort = None
     pending = set()
     goal = None
     goal_at = None
-    advances = 0
     calls = 0
     compactions = 0
     with path.open(encoding="utf-8") as f:
@@ -73,6 +137,7 @@ def snapshot(path, session_id, until=None):
                 continue
             if event.get("type") == "session_meta" and q.get("id") != session_id:
                 raise ValueError("conflicting session identity")
+            ledger.observe(event)
             if event.get("type") == "turn_context":
                 model, effort = q.get("model"), q.get("effort")
             if event.get("type") == "compacted":
@@ -92,36 +157,15 @@ def snapshot(path, session_id, until=None):
                 continue
             if kind == "task_complete":
                 complete_at = timestamp
-            if kind != "token_count" or not isinstance(q.get("info"), dict):
-                continue
-            current = q["info"].get("total_token_usage")
-            if not isinstance(current, dict):
-                continue
-            values = {k: current.get(k) for k in FIELDS}
-            if any(v is not None and (type(v) is not int or v < 0) for v in values.values()):
-                raise ValueError("invalid token counter")
-            if any(values[k] is not None and k in highwater and values[k] < highwater[k] for k in FIELDS):
-                raise ValueError("non-monotonic token counters")
-            highwater.update({k: v for k, v in values.items() if v is not None})
-            if latest != values:
-                advances += 1
-            latest, sample_at = values, timestamp
-    if latest is None:
-        raise ValueError("no usage telemetry")
-    inp, cache = latest["input_tokens"], latest["cached_input_tokens"]
-    if inp is not None and cache is not None and cache > inp:
-        raise ValueError("cached input exceeds input")
-    if latest["output_tokens"] is not None and latest["reasoning_output_tokens"] is not None and latest["reasoning_output_tokens"] > latest["output_tokens"]:
-        raise ValueError("reasoning exceeds output")
-    if all(latest[k] is not None for k in ("input_tokens", "output_tokens", "total_tokens")) and latest["input_tokens"] + latest["output_tokens"] != latest["total_tokens"]:
-        raise ValueError("inconsistent total")
-    latest["uncached_input_tokens"] = inp - cache if inp is not None and cache is not None else None
-    return {"session_id": session_id, "rollout": str(path), "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(), "cutoff": sample_at, "task_complete_at": complete_at, "completed_after_usage": bool(complete_at and sample_at and complete_at >= sample_at), "model": model, "effort": effort, "usage": latest, "usage_advances": advances, "tool_calls": calls, "compactions": compactions, "goal_evidence": goal, "goal_observed_at": goal_at}
+    latest, sample_at, advances, basis = ledger.result(compactions)
+    return {"session_id": session_id, "rollout": str(path), "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(), "cutoff": sample_at, "accounting_basis": basis, "task_complete_at": complete_at, "completed_after_usage": bool(complete_at and sample_at and complete_at >= sample_at), "model": model, "effort": effort, "usage": latest, "usage_advances": advances, "tool_calls": calls, "compactions": compactions, "goal_evidence": goal, "goal_observed_at": goal_at}
 
 
 def interval(start, end):
     if start["session_id"] != end["session_id"]:
         raise ValueError("interval session mismatch")
+    if start.get("accounting_basis", "event_msg.total_token_usage") != end.get("accounting_basis", "event_msg.total_token_usage"):
+        raise ValueError("interval accounting basis mismatch; recapture both snapshots")
     if start["cutoff"] > end["cutoff"]:
         raise ValueError("reversed interval")
     values = {}

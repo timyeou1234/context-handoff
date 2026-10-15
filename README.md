@@ -1,6 +1,6 @@
 # Context Handoff for Codex
 
-Current release: **0.3.6**.
+Current release: **0.3.7**.
 
 OpenAI public directory status (2026-10-15): the published listing remains **0.3.4**. The 0.3.5 update was uploaded, but the portal blocked submission because the package contains lifecycle hooks and skills-only submissions are currently unavailable. Version 0.3.6 adds the supported `interface.supportURL` field to address a separate metadata finding. Hooks and acceptance criteria are preserved; GitHub releases and local marketplace updates do not imply public publication.
 
@@ -65,7 +65,7 @@ codex plugin add context-handoff@context-handoff-local
 codex plugin list --marketplace context-handoff-local --json
 ```
 
-Check that the installed version is `0.3.6`. A standalone skill installation is separate: update the full `skills/context-handoff/` directory, including both scripts and agent metadata. Do not copy only `SKILL.md`. Restart the desktop app if it still shows the previous local version; review any changed hook trust prompt in `/hooks`. Local installation and a GitHub release do not establish public Plugins Directory approval or publication.
+Check that the installed version is `0.3.7`. A standalone skill installation is separate: update the full `skills/context-handoff/` directory, including both scripts and agent metadata. Do not copy only `SKILL.md`. Restart the desktop app if it still shows the previous local version; review any changed hook trust prompt in `/hooks`. Local installation and a GitHub release do not establish public Plugins Directory approval or publication.
 
 ## Use
 
@@ -127,6 +127,28 @@ The preliminary failure remains in experiment costs but is excluded from the acc
 This is one observed pair, not a guaranteed reduction or a comparison of handoff against continuing without handoff. Cache warmth, scheduling and model variability were not fully controlled; no monetary savings are inferred. Both native Goals were absent, so active-Goal restoration was not exercised. Only local task visibility was tested, with no cloud or other-device claim. The earlier long-history run included repairs and is not this comparison's control.
 
 See the [sanitized measurement data](docs/benchmarks/2026-10-14-local-e2e.json) for counters, cutoffs, frozen skill hashes, acceptance coverage and limitations. A repeat should keep the same contract and gates, freeze both implementations, use fresh sources with matched model/settings, and account for both sessions, failures and experimental overhead separately.
+
+## Compaction accounting repair and local rerun (2026-10-15)
+
+Version 0.3.7 fixes both usage helpers. The previous native hook trace contained **141,422 tokens**, while legacy `event_msg.token_count` reported **123,139**: **18,283 compaction tokens were omitted**. Both commands now share a parser that prefers `token_usage_record.thread_token_usage`, keeps legacy and ledger counters separate, rejects mixed-basis intervals and counter resets, and preserves unknown optional fields. Legacy-only telemetry with compaction cannot establish complete cost.
+
+All **40 regression tests** passed (the existing 36 plus four accounting regressions). A frozen local 0.3.7 installation passed the original contract, identity, effective-permission, Goal-null, visibility, opening, unpinned, recoverability, source-final-archive and independent archival-readback gates. Native compaction/hooks passed through a separate official local App Server trace; this is not a single desktop compact-to-handoff trace. SessionStart and UserPromptSubmit have successful runtime events; SessionEnd cleanup is evidenced by removal of the exact state file after process exit, without a retained completion event. Active Goal restoration and cloud/mobile visibility remain untested.
+
+The previous controller's **7,858,997 tokens** came from **40 model requests**, averaging **195,863 input tokens** per request (maximum 224,489). Input totaled 7,834,528, including 7,751,424 cached tokens (**98.94%**); output was 24,469. Its tool batches included 13 waits, four documentation searches/fetches and 38 shell calls. A batched request does not establish the marginal cost of each nested tool. Repeated long-history input, including cached input, dominates the total.
+
+The rerun reused the verified API/runtime path and preflight, retained required independent checks, and used deterministic ledger aggregation and report read-back. No implementation changed during measurement. Repair and release preparation are separate from test and handoff costs:
+
+| Category | Previous 0.3.6 run | This 0.3.7 run |
+| --- | ---: | ---: |
+| One-time repair, regression, installation and documentation | 0 (defect left unfixed) | 1,204,310 |
+| Test preparation and controller verification | 8,261,515 | 1,627,986 |
+| Of which: controller | 7,858,997 | 1,243,244 |
+| Handoff and archival, including completed destination | 1,785,655 | 1,389,487 |
+| Entire observed run, including current repair | 10,047,170 | 4,221,783 |
+
+Controller usage was **6,615,753 tokens lower (84.18%)**; including the current repair, the observed total was **5,825,387 tokens lower (57.98%)**. The new controller used 14 requests averaging 87,822 input tokens. These are observed differences, **not proven causal savings**: functional gates and GPT-6 Astra/high were retained, but the controller's starting history had been compacted, prompts were streamlined, and cache/scheduling differed. The old run's accounting defect is corrected from its raw ledger in this table.
+
+Repair accounting ends at **2026-10-15T13:15:38.499Z**; test controller accounting ends at **2026-10-15T13:14:31.067Z**. Subsequent release operations and final user-facing reporting are excluded. Source and destination costs are disjoint from controller costs; cached input and reasoning are subsets, not additional tokens. See the [sanitized complete counters, phase boundaries and acceptance evidence](docs/benchmarks/2026-10-15-local-0.3.7.json).
 
 ## Release automation
 

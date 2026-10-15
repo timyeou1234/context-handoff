@@ -10,6 +10,8 @@ import re
 import sys
 from pathlib import Path
 
+from handoff_evidence import FIELDS, snapshot
+
 
 REQUIRED_SECTIONS = (
     "Goal",
@@ -458,7 +460,7 @@ def archive_result(args: argparse.Namespace) -> int:
 
 def usage(args: argparse.Namespace) -> int:
     """Read token telemetry only; never emit transcript content or infer cache misses."""
-    fields = ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens")
+    fields = FIELDS
     rows = []
     seen = set()
     for name in args.rollouts:
@@ -466,41 +468,29 @@ def usage(args: argparse.Namespace) -> int:
         if path in seen:
             raise SystemExit("duplicate rollout would double-count usage")
         seen.add(path)
-        latest = None
         session_id = None
-        compactions = 0
-        resets = False
-        malformed = 0
-        with path.open(encoding="utf-8") as stream:
-            for line in stream:
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    malformed += 1
-                    continue
-                if not isinstance(event, dict):
-                    continue
-                payload = event.get("payload", {})
-                if not isinstance(payload, dict):
-                    continue
-                if event.get("type") == "session_meta":
-                    session_id = payload.get("id")
-                if event.get("type") == "compacted":
-                    compactions += 1
-                if event.get("type") == "event_msg" and payload.get("type") == "token_count":
-                    info = payload.get("info") or {}
-                    current = info.get("total_token_usage") if isinstance(info, dict) else None
-                    if isinstance(current, dict):
-                        values = {k: current.get(k) if type(current.get(k)) is int and current[k] >= 0 else None for k in fields}
-                        if latest and any(values[k] is not None and latest[k] is not None and values[k] < latest[k] for k in fields):
-                            resets = True
-                        latest = values
-        rows.append({"rollout": str(path), "session_id": session_id, "cumulative_usage": latest,
-                     "compactions": compactions, "counter_reset": resets, "malformed_lines": malformed})
+        data = None
+        error = None
+        try:
+            with path.open(encoding="utf-8") as stream:
+                first = json.loads(stream.readline())
+            if first.get("type") == "session_meta":
+                session_id = first.get("payload", {}).get("id")
+            if not session_id:
+                raise ValueError("missing session identity")
+            data = snapshot(path, session_id)
+        except (ValueError, OSError) as exc:
+            error = str(exc)
+        rows.append({"rollout": str(path), "session_id": session_id,
+                     "cumulative_usage": data["usage"] if data else None,
+                     "accounting_basis": data["accounting_basis"] if data else None,
+                     "compactions": data["compactions"] if data else None,
+                     "counter_reset": bool(error and "non-monotonic" in error),
+                     "malformed_lines": None if error else 0, "error": error})
     identities = [row["session_id"] for row in rows if row["session_id"]]
     if len(identities) != len(set(identities)):
         raise SystemExit("duplicate session identity would double-count usage")
-    reliable = bool(rows) and all(row["cumulative_usage"] and not row["counter_reset"] and not row["malformed_lines"] for row in rows)
+    reliable = bool(rows) and all(row["cumulative_usage"] and not row["counter_reset"] and not row["error"] for row in rows)
     totals = {k: sum(row["cumulative_usage"][k] for row in rows) if reliable and all(row["cumulative_usage"][k] is not None for row in rows) else None for k in fields}
     inp, cached = totals["input_tokens"], totals["cached_input_tokens"]
     totals["uncached_input_tokens"] = inp - cached if inp is not None and cached is not None and inp >= cached else None

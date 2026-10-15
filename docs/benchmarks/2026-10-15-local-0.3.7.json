@@ -1,0 +1,243 @@
+{
+  "version": "0.3.7",
+  "status": "PASS",
+  "regression_tests": 40,
+  "gates": {
+    "contract_identity": true,
+    "portable_projectless_workspace": true,
+    "ordinary_write_readback": true,
+    "runtime_permissions": true,
+    "source_and_destination_native_goal_absent": true,
+    "source_independent_destination_goal_check": true,
+    "destination_visible_unpinned": true,
+    "source_independent_visibility_and_navigation": true,
+    "validated_recovery_retained": true,
+    "archive_plan_passed": true,
+    "source_archive_final_mutation": true,
+    "source_archival_independently_confirmed": true,
+    "parent_remains_active": true,
+    "native_hooks_separate_trace": true,
+    "compaction_complete_accounting": true,
+    "observer_independent_archive_and_visibility": true,
+    "completed_destination_accounting": true,
+    "runtime_installation_unchanged": true,
+    "json_and_text_readback": true
+  },
+  "contract_sha256": "feb6b7ded32206d16e369658f49a4f227988bea7aae65eff7391c67b9e217e0f",
+  "repair": {
+    "input_tokens": 1185018,
+    "cached_input_tokens": 1121920,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 19292,
+    "reasoning_output_tokens": 3410,
+    "total_tokens": 1204310,
+    "uncached_input_tokens": 63098
+  },
+  "test": {
+    "input_tokens": 1610493,
+    "cached_input_tokens": 1535232,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 17493,
+    "reasoning_output_tokens": 5925,
+    "total_tokens": 1627986,
+    "uncached_input_tokens": 75261
+  },
+  "handoff": {
+    "input_tokens": 1376633,
+    "cached_input_tokens": 1310592,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 12854,
+    "reasoning_output_tokens": 423,
+    "total_tokens": 1389487,
+    "uncached_input_tokens": 66041
+  },
+  "operation": {
+    "input_tokens": 2987126,
+    "cached_input_tokens": 2845824,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 30347,
+    "reasoning_output_tokens": 6348,
+    "total_tokens": 3017473,
+    "uncached_input_tokens": 141302
+  },
+  "total": {
+    "input_tokens": 4172144,
+    "cached_input_tokens": 3967744,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 49639,
+    "reasoning_output_tokens": 9758,
+    "total_tokens": 4221783,
+    "uncached_input_tokens": 204400
+  },
+  "breakdown": {
+    "repair_before_test": {
+      "input_tokens": 1081357,
+      "cached_input_tokens": 1023104,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 17394,
+      "reasoning_output_tokens": 2113,
+      "total_tokens": 1098751,
+      "uncached_input_tokens": 58253
+    },
+    "repair_after_test": {
+      "input_tokens": 103661,
+      "cached_input_tokens": 98816,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1898,
+      "reasoning_output_tokens": 1297,
+      "total_tokens": 105559,
+      "uncached_input_tokens": 4845
+    },
+    "test_controller": {
+      "input_tokens": 1229514,
+      "cached_input_tokens": 1209216,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 13730,
+      "reasoning_output_tokens": 5707,
+      "total_tokens": 1243244,
+      "uncached_input_tokens": 20298
+    },
+    "test_source_preflight": {
+      "input_tokens": 239682,
+      "cached_input_tokens": 205440,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2555,
+      "reasoning_output_tokens": 191,
+      "total_tokens": 242237,
+      "uncached_input_tokens": 34242
+    },
+    "test_native_hooks": {
+      "input_tokens": 141297,
+      "cached_input_tokens": 120576,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1208,
+      "reasoning_output_tokens": 27,
+      "total_tokens": 142505,
+      "uncached_input_tokens": 20721
+    },
+    "handoff_source": {
+      "input_tokens": 751381,
+      "cached_input_tokens": 729472,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 6388,
+      "reasoning_output_tokens": 183,
+      "total_tokens": 757769,
+      "uncached_input_tokens": 21909
+    },
+    "handoff_destination": {
+      "input_tokens": 625252,
+      "cached_input_tokens": 581120,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 6466,
+      "reasoning_output_tokens": 240,
+      "total_tokens": 631718,
+      "uncached_input_tokens": 44132
+    }
+  },
+  "cutoffs": {
+    "repair_start": "2026-10-15T12:44:30.612Z",
+    "test_start": "2026-10-15T13:02:17.247Z",
+    "test_end": "2026-10-15T13:14:31.067Z",
+    "report_cutoff": "2026-10-15T13:15:38.499Z",
+    "source_preflight_end": "2026-10-15T13:03:49.796Z",
+    "source_end": "2026-10-15T13:09:29.267Z",
+    "destination_end": "2026-10-15T13:11:30.780Z"
+  },
+  "comparison": {
+    "observer": {
+      "before": 7858997,
+      "after": 1243244,
+      "fewer_tokens": 6615753,
+      "observed_reduction_percent": 84.18
+    },
+    "test": {
+      "before": 8261515,
+      "after": 1627986,
+      "fewer_tokens": 6633529,
+      "observed_reduction_percent": 80.29
+    },
+    "handoff": {
+      "before": 1785655,
+      "after": 1389487,
+      "fewer_tokens": 396168,
+      "observed_reduction_percent": 22.19
+    },
+    "operation_excluding_repair": {
+      "before": 10047170,
+      "after": 3017473,
+      "fewer_tokens": 7029697,
+      "observed_reduction_percent": 69.97
+    },
+    "including_current_repair": {
+      "before": 10047170,
+      "after": 4221783,
+      "fewer_tokens": 5825387,
+      "observed_reduction_percent": 57.98
+    }
+  },
+  "controller_audit_before": {
+    "start": "2026-10-15T12:26:00.313Z",
+    "end": "2026-10-15T12:43:49.811Z",
+    "usage": {
+      "input_tokens": 7834528,
+      "cached_input_tokens": 7751424,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 24469,
+      "reasoning_output_tokens": 8498,
+      "total_tokens": 7858997,
+      "uncached_input_tokens": 83104
+    },
+    "requests": 40,
+    "tool_calls": 40,
+    "mean_request_input": 195863.2,
+    "max_request_input": 224489,
+    "tools": {
+      "exec": 39,
+      "js": 1
+    },
+    "compactions": 0,
+    "cached_input_share": 0.989392596465288,
+    "nested_tool_counts": {
+      "exec_command": 38,
+      "mcp__codex_app__list_threads": 3,
+      "get_goal": 1,
+      "mcp__openaiDeveloperDocs__search_openai_docs": 2,
+      "mcp__openaiDeveloperDocs__fetch_openai_doc": 2,
+      "mcp__codex_app__create_thread": 1,
+      "mcp__codex_app__navigate_to_codex_page": 1,
+      "mcp__codex_app__wait_threads": 13,
+      "mcp__codex_app__send_message_to_thread": 1,
+      "write_stdin": 2,
+      "apply_patch": 3,
+      "mcp__codex_app__set_thread_title": 1,
+      "mcp__codex_app__list_archived_threads": 1
+    },
+    "attribution_limit": "Batched requests cannot establish marginal token costs per nested tool; request input is charged repeatedly even for a short status poll."
+  },
+  "controller_audit_after": {
+    "requests": 14,
+    "mean_request_input": 87822.42857142857,
+    "max_request_input": 99001,
+    "cached_input_share": 0.983491037922301
+  },
+  "accounting_basis": "Latest token_usage_record.thread_token_usage; disjoint phase differences, never cumulative sums. Includes compaction and all measured rework.",
+  "cost_scope": "Repair includes implementation, regression tests, installation and post-test documentation through report cutoff. Test includes preflight, native hook probe and controller. Handoff includes phase-two source plus completed destination. Subsequent release operations and final reply are outside the stated cutoff.",
+  "savings_status": "Observed differences only; causal savings unproven. Same functional gates and gpt-6-astra/high, but controller starting history changed after compaction, prompts were streamlined, cache and scheduling differ. Previous 0.3.6 accounting defect was corrected from raw ledger for this comparison.",
+  "limitations": [
+    "Separate official local App Server trace; SessionEnd cleanup observed after process exit; no SessionEnd completion event retained after unsubscribe.",
+    "Both native Goals absent; active Goal restoration not tested.",
+    "Local visibility/permissions only; no cloud/mobile claim.",
+    "Token counts are not monetary cost; retries and subagent cost not independently attributable.",
+    "Token counts are not monetary cost; retries and subagent cost not independently attributable."
+  ],
+  "frozen_runtime_hashes": {
+    "skills/context-handoff/SKILL.md": "46fae17e11a6d1a7ecef3569bc6a4fad322878a232a8a863d946056f26bc213e",
+    "skills/context-handoff/agents/openai.yaml": "29e4fa0d7c6410b22ef1b39d18fdc062a6946585aa4a5d5ae677836ac9e3e863",
+    "skills/context-handoff/scripts/context_handoff.py": "3bc5994efc87f37b473d594739a4b07479bc92616e96756bfb32ee870c0c1e7f",
+    "skills/context-handoff/scripts/handoff_evidence.py": "33fd80ba79bee61b3f5bfb0ff5c469518861800c72a283f8bef06d70a689f98f",
+    ".codex-plugin/plugin.json": "1977502b54d5d74eadf268e19467c5c7463f3c1a5a279e37d599515c9217453f",
+    "hooks/hooks.json": "989ecd9d4775faaf4c3816acdd18dbe7cc8dc30d732ce0bbc1f42bd4ae95fab7",
+    "hooks/context_health.py": "fa107ef9748175118755ef97b54aa69593314210acbd9b245e25f920a72e120f"
+  },
+  "provenance": "Private exact-session traces and raw tool receipts retained locally; public benchmark omits transcript text, task identifiers and local paths."
+}

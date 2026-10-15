@@ -23,6 +23,13 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 2. Prepare a safe handoff packet for this long-running Codex task.
 3. Check context health and hand off only if a fresh thread is warranted.
 
+## Release notes — 0.3.7
+
+- Fix compaction token omission by using the complete per-thread cumulative ledger in both usage helpers, with legacy fallback only where complete accounting is possible.
+- Reject cross-basis intervals and conflicting/reset counters; preserve unknown optional fields.
+- Reuse verified preflight and deterministic evidence aggregation while preserving all independent handoff and archival gates.
+- The OpenAI public update remains blocked as described below; this release retains lifecycle hooks.
+
 ## Release notes — 0.3.6
 
 Adds the public submission `interface.supportURL` field. No skill, hook, or acceptance behavior changes from 0.3.5.

@@ -2,6 +2,8 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills/context-handoff/scripts/handoff_evidence.py"
@@ -82,5 +84,68 @@ class EvidenceTests(unittest.TestCase):
             self.assertIsNone(evidence.interval(r,r)["usage"]["cache_write_input_tokens"])
             other=dict(r,session_id="other")
             with self.assertRaises(ValueError): evidence.interval(r,other)
+
+    def compaction_events(self):
+        # Sanitized real 0.3.6 native trace: compaction was absent from legacy totals.
+        def ledger(stamp, inp, cache, output, reasoning):
+            return {"timestamp":stamp,"type":"token_usage_record","payload":{
+                "thread_id":"exact", "usage":{"total_tokens":999999},
+                "thread_token_usage":{"input_tokens":inp,"cached_input_tokens":cache,
+                    "cache_write_input_tokens":0,"output_tokens":output,
+                    "reasoning_output_tokens":reasoning,"total_tokens":inp+output}}}
+        rows = [self.events()[0], ledger("2026-01-01T00:00:01Z",17999,0,19,0),
+            {"timestamp":"2026-01-01T00:00:02Z","type":"compacted","payload":{}},
+            ledger("2026-01-01T00:00:03Z",36037,17792,264,0),
+            ledger("2026-01-01T00:00:04Z",140372,120064,1050,43)]
+        old=self.events()[4];old["timestamp"]="2026-01-01T00:00:05Z"
+        old["payload"]["info"]["total_token_usage"].update(input_tokens=122334,
+            cached_input_tokens=102272,output_tokens=805,reasoning_output_tokens=43,total_tokens=123139)
+        return rows+[old, rows[-1].copy()]
+
+    def test_compaction_included_once_by_both_commands(self):
+        with tempfile.TemporaryDirectory() as t:
+            p=self.write(t,self.compaction_events());end=evidence.snapshot(p,"exact")
+            self.assertEqual(end["usage"]["total_tokens"],141422)
+            self.assertEqual(end["usage_advances"],3)
+            start=evidence.snapshot(p,"exact","2026-01-01T00:00:01Z")
+            compact=evidence.snapshot(p,"exact","2026-01-01T00:00:03Z")
+            self.assertEqual(evidence.interval(start,compact)["usage"]["total_tokens"],18283)
+            cli=subprocess.run([sys.executable,str(SCRIPT.with_name("context_handoff.py")),"usage",str(p)],capture_output=True,text=True)
+            self.assertEqual(cli.returncode,0,cli.stderr)
+            self.assertEqual(json.loads(cli.stdout)["totals"],end["usage"])
+
+    def test_ledger_identity_reset_and_invalid_counters_fail_closed(self):
+        with tempfile.TemporaryDirectory() as t:
+            for update in [{"input_tokens":1},{"cached_input_tokens":True},
+                           {"total_tokens":-1},{"reasoning_output_tokens":99999}]:
+                rows=self.compaction_events();rows[-1]=json.loads(json.dumps(rows[-1]))
+                rows[-1]["payload"]["thread_token_usage"].update(update)
+                with self.assertRaises(ValueError):evidence.snapshot(self.write(t,rows),"exact")
+            rows=self.compaction_events();rows[1]["payload"]["thread_id"]="other"
+            with self.assertRaises(ValueError):evidence.snapshot(self.write(t,rows),"exact")
+            rows=self.compaction_events();rows[1]["payload"].pop("thread_token_usage")
+            with self.assertRaises(ValueError):evidence.snapshot(self.write(t,rows),"exact")
+
+    def test_no_mixed_bases_or_legacy_compaction_claim(self):
+        with tempfile.TemporaryDirectory() as t:
+            legacy=evidence.snapshot(self.write(t,self.events()),"exact")
+            modern=evidence.snapshot(self.write(t,self.compaction_events()),"exact")
+            with self.assertRaises(ValueError):evidence.interval(legacy,modern)
+            with self.assertRaises(ValueError):evidence.interval(modern,dict(modern,cutoff="2025"))
+            rows=self.events()+[{"type":"compacted","payload":{}}]
+            with self.assertRaisesRegex(ValueError,"compaction accounting unavailable"):
+                evidence.snapshot(self.write(t,rows),"exact")
+
+    def test_ledger_missing_optional_fields_remain_unknown_and_stale_fails(self):
+        with tempfile.TemporaryDirectory() as t:
+            rows=self.compaction_events()[:4]
+            rows[-1]["payload"]["thread_token_usage"].pop("cached_input_tokens")
+            r=evidence.snapshot(self.write(t,rows),"exact")
+            self.assertIsNone(r["usage"]["cached_input_tokens"])
+            self.assertIsNone(r["usage"]["uncached_input_tokens"])
+            rows=self.compaction_events();old=rows[-2]["payload"]["info"]["total_token_usage"]
+            old.update(input_tokens=200000,total_tokens=200805)
+            with self.assertRaisesRegex(ValueError,"incomplete telemetry"):
+                evidence.snapshot(self.write(t,rows),"exact")
 
 if __name__ == "__main__": unittest.main()
