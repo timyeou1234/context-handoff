@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -17,6 +18,9 @@ REQUIRED_SECTIONS = (
     "Applicable constraints",
     "Workspace identity",
     "Source lifecycle",
+    "Goal continuity",
+    "Authorization and permissions",
+    "Handoff accounting",
     "Completed and verified",
     "Unverified and open",
     "Failures and discarded approaches",
@@ -67,9 +71,30 @@ Source host: [TODO: identifier or unavailable]
 
 ## Source lifecycle
 
-- Goal status: [TODO: active, complete, blocked, none, or unknown]
+- Goal status: [TODO: active, paused, complete, blocked, none, or unknown]
 - Source archival authorization: [TODO: per-handoff, standing preference, declined, or unspecified]
 - Source closure status: [TODO: pending destination verification]
+
+## Goal continuity
+
+- Objective: [TODO: exact source Goal objective, or none]
+- Goal authorization: [TODO: user instruction authorizing the Goal and continuation, or none]
+- Remaining budget: [TODO: original cap and measured remaining tokens, unbudgeted, or unknown; never reset]
+- Resume policy: [TODO: restore active Goal only with authorization; preserve paused/blocked/completed state]
+
+## Authorization and permissions
+
+- Authorized scope and evidence: [TODO: exact user instruction, source turn reference, authorized actions and limits]
+- Pending approvals and exclusions: [TODO: unresolved approvals, denials, or none]
+- Runtime permissions: [TODO: observed sandbox, approval policy, filesystem roots, network and required connectors; unknown where unavailable]
+- Destination permission check: [TODO: compare effective destination permissions for next action; text is not a grant]
+
+## Handoff accounting
+
+- Chain and prior transfer: [TODO: chain ID, exact previous handoff UTC timestamp or no prior transfer; do not reset in destination]
+- Trigger evidence: [TODO: measured ratio and independently observed degradation, or explicit request]
+- Usage evidence: [TODO: exact source rollout identity and pre-handoff cumulative snapshot, or unavailable]
+- Comparable baseline: [TODO: equivalent accepted-work baseline identity or unavailable; no unsupported savings claim]
 
 ## Completed and verified
 
@@ -110,6 +135,8 @@ def assess(args: argparse.Namespace) -> int:
         raise SystemExit("--context-window must be positive")
     if args.used_tokens is not None and args.used_tokens < 0:
         raise SystemExit("--used-tokens cannot be negative")
+    if args.minutes_since_handoff is not None and (not math.isfinite(args.minutes_since_handoff) or args.minutes_since_handoff < 0):
+        raise SystemExit("--minutes-since-handoff must be finite and nonnegative")
     if args.compactions < 0 or args.degradation_signals < 0:
         raise SystemExit("counts cannot be negative")
 
@@ -119,15 +146,14 @@ def assess(args: argparse.Namespace) -> int:
 
     checkpoint_reasons: list[str] = []
     handoff_reasons: list[str] = []
-    if ratio is not None:
-        if ratio >= 0.85:
-            handoff_reasons.append(f"context usage is {ratio:.1%}")
-        elif ratio >= 0.70:
-            checkpoint_reasons.append(f"context usage is {ratio:.1%}")
-    if args.compactions >= 2:
-        handoff_reasons.append(f"{args.compactions} compactions observed")
-    elif args.compactions == 1:
-        checkpoint_reasons.append("1 compaction observed")
+    if ratio is not None and ratio >= 0.85:
+        checkpoint_reasons.append(f"context usage is {ratio:.1%}")
+        if ratio >= 0.95 and args.degradation_signals >= 1:
+            handoff_reasons.append(f"context usage is {ratio:.1%} with observed degradation")
+    if args.compactions > 0:
+        checkpoint_reasons.append(f"{args.compactions} compactions observed")
+        if args.compactions >= 3 and args.degradation_signals >= 1:
+            handoff_reasons.append(f"{args.compactions} compactions with observed degradation")
     if args.degradation_signals >= 2:
         handoff_reasons.append(
             f"{args.degradation_signals} context-degradation signals observed"
@@ -138,8 +164,11 @@ def assess(args: argparse.Namespace) -> int:
         handoff_reasons.append("user explicitly requested a handoff")
 
     authorized = args.requested or args.standing_authorization
+    cooldown = (not args.requested and args.degradation_signals < 2 and
+                (args.prior_handoff_unknown or
+                 (args.minutes_since_handoff is not None and args.minutes_since_handoff < 60)))
     if handoff_reasons:
-        if args.unsafe:
+        if args.unsafe or cooldown:
             decision = "handoff-deferred"
         elif authorized:
             decision = "handoff-ready"
@@ -153,6 +182,7 @@ def assess(args: argparse.Namespace) -> int:
     emit(
         {
             "authorized": authorized,
+            "cooldown_active": cooldown,
             "context_ratio": round(ratio, 4) if ratio is not None else None,
             "decision": decision,
             "handoff_reasons": handoff_reasons,
@@ -229,13 +259,22 @@ def validate(args: argparse.Namespace) -> int:
             errors.append(f"Source lifecycle must include {label}: <value>")
 
     goal_match = re.search(
-        r"(?mi)^\s*-\s*Goal status\s*:\s*(active|complete|blocked|none|unknown)\s*$",
+        r"(?mi)^\s*-\s*Goal status\s*:\s*(active|paused|complete|blocked|none|unknown)\s*$",
         lifecycle,
     )
     if lifecycle and not goal_match:
         errors.append(
-            "Source lifecycle Goal status must be active, complete, blocked, none, or unknown"
+            "Source lifecycle Goal status must be active, paused, complete, blocked, none, or unknown"
         )
+
+    for section, labels in {
+        "Goal continuity": ("Objective", "Goal authorization", "Remaining budget", "Resume policy"),
+        "Authorization and permissions": ("Authorized scope and evidence", "Pending approvals and exclusions", "Runtime permissions", "Destination permission check"),
+        "Handoff accounting": ("Chain and prior transfer", "Trigger evidence", "Usage evidence", "Comparable baseline"),
+    }.items():
+        for label in labels:
+            if not re.search(rf"(?mi)^\s*-\s*{re.escape(label)}\s*:\s*\S.*$", sections.get(section, "")):
+                errors.append(f"{section} must include {label}: <value>")
 
     for label, pattern in SECRET_PATTERNS:
         if pattern.search(text):
@@ -283,8 +322,22 @@ def archive_plan(args: argparse.Namespace) -> int:
         blockers.append("destination reported HANDOFF REGRESSION")
     elif not args.destination_verified:
         blockers.append("destination has not reported HANDOFF VERIFIED")
+    if not args.goal_continuity_verified:
+        blockers.append("destination Goal continuity is unverified")
+    if not args.permissions_verified:
+        blockers.append("required destination permissions are unverified")
+    visibility_blockers = []
     if not args.destination_discoverable:
-        blockers.append("destination mobile/sidebar discoverability is unverified")
+        visibility_blockers.append("destination task-inventory visibility is unverified")
+    if not args.destination_opened:
+        visibility_blockers.append("destination has not been successfully opened")
+    if not args.destination_thread_id or not args.destination_thread_id.strip():
+        visibility_blockers.append("surface-provided destination thread identifier is required")
+    if not args.destination_location:
+        visibility_blockers.append("destination local/cloud location is unverified")
+    if args.destination_location == "local" and not (args.destination_host_id and args.destination_host_id.strip()):
+        visibility_blockers.append("local destination host identifier is required")
+    blockers.extend(visibility_blockers)
     if args.unsafe:
         blockers.extend(f"unsafe state: {reason}" for reason in args.unsafe)
     if not args.packet_available:
@@ -310,10 +363,10 @@ def archive_plan(args: argparse.Namespace) -> int:
     elif (
         args.destination_verified
         and not args.destination_regression
-        and not args.destination_discoverable
+        and visibility_blockers
     ):
-        decision = "handoff-mobile-visibility-unverified"
-        lifecycle_state = "HANDOFF MOBILE VISIBILITY UNVERIFIED"
+        decision = "handoff-visibility-unverified"
+        lifecycle_state = "HANDOFF VISIBILITY UNVERIFIED"
     elif args.destination_verified and not args.destination_regression and goal_auto_resume_risk:
         decision = "handoff-verified-source-still-active"
         lifecycle_state = "HANDOFF_VERIFIED_WITH_SOURCE_STILL_ACTIVE"
@@ -334,6 +387,10 @@ def archive_plan(args: argparse.Namespace) -> int:
             "goal_status": args.goal_status,
             "lifecycle_state": lifecycle_state,
             "manual_fallback_required": bool(blockers and goal_auto_resume_risk),
+            "destination_location": args.destination_location,
+            "destination_thread_id": args.destination_thread_id,
+            "destination_host_id": args.destination_host_id,
+            "visibility_verified": not visibility_blockers,
             "source_host_id": args.source_host_id,
             "source_thread_id": args.source_thread_id,
         }
@@ -399,6 +456,60 @@ def archive_result(args: argparse.Namespace) -> int:
     return 0
 
 
+def usage(args: argparse.Namespace) -> int:
+    """Read token telemetry only; never emit transcript content or infer cache misses."""
+    fields = ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens")
+    rows = []
+    seen = set()
+    for name in args.rollouts:
+        path = Path(name).expanduser().resolve()
+        if path in seen:
+            raise SystemExit("duplicate rollout would double-count usage")
+        seen.add(path)
+        latest = None
+        session_id = None
+        compactions = 0
+        resets = False
+        malformed = 0
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    malformed += 1
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                payload = event.get("payload", {})
+                if not isinstance(payload, dict):
+                    continue
+                if event.get("type") == "session_meta":
+                    session_id = payload.get("id")
+                if event.get("type") == "compacted":
+                    compactions += 1
+                if event.get("type") == "event_msg" and payload.get("type") == "token_count":
+                    info = payload.get("info") or {}
+                    current = info.get("total_token_usage") if isinstance(info, dict) else None
+                    if isinstance(current, dict):
+                        values = {k: current.get(k) if type(current.get(k)) is int and current[k] >= 0 else None for k in fields}
+                        if latest and any(values[k] is not None and latest[k] is not None and values[k] < latest[k] for k in fields):
+                            resets = True
+                        latest = values
+        rows.append({"rollout": str(path), "session_id": session_id, "cumulative_usage": latest,
+                     "compactions": compactions, "counter_reset": resets, "malformed_lines": malformed})
+    identities = [row["session_id"] for row in rows if row["session_id"]]
+    if len(identities) != len(set(identities)):
+        raise SystemExit("duplicate session identity would double-count usage")
+    reliable = bool(rows) and all(row["cumulative_usage"] and not row["counter_reset"] and not row["malformed_lines"] for row in rows)
+    totals = {k: sum(row["cumulative_usage"][k] for row in rows) if reliable and all(row["cumulative_usage"][k] is not None for row in rows) else None for k in fields}
+    inp, cached = totals["input_tokens"], totals["cached_input_tokens"]
+    totals["uncached_input_tokens"] = inp - cached if inp is not None and cached is not None and inp >= cached else None
+    emit({"measurement": "observed cumulative usage; not incremental handoff cost", "sessions": rows,
+          "totals": totals, "savings_percent": None, "savings_status": "unproven: no equivalent accepted-work control",
+          "retries": None, "subagent_share": None, "billing_cost": None})
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
         description="Assess Codex context pressure and validate handoff packets."
@@ -410,6 +521,8 @@ def parser() -> argparse.ArgumentParser:
     assess_parser.add_argument("--context-window", type=int)
     assess_parser.add_argument("--compactions", type=int, default=0)
     assess_parser.add_argument("--degradation-signals", type=int, default=0)
+    assess_parser.add_argument("--minutes-since-handoff", type=float)
+    assess_parser.add_argument("--prior-handoff-unknown", action="store_true")
     assess_parser.add_argument("--requested", action="store_true")
     assess_parser.add_argument("--standing-authorization", action="store_true")
     assess_parser.add_argument(
@@ -439,14 +552,20 @@ def parser() -> argparse.ArgumentParser:
     archive_parser.add_argument(
         "--destination-discoverable",
         action="store_true",
-        help="exact destination thread and host were confirmed in the pinned list, or the user explicitly opted out",
+        help="exact destination identity was confirmed in its local/cloud task inventory; pinning or opting out is insufficient",
     )
+    archive_parser.add_argument("--destination-opened", action="store_true")
+    archive_parser.add_argument("--destination-thread-id")
+    archive_parser.add_argument("--destination-location", choices=("local", "cloud"))
+    archive_parser.add_argument("--destination-host-id")
+    archive_parser.add_argument("--goal-continuity-verified", action="store_true")
+    archive_parser.add_argument("--permissions-verified", action="store_true")
     archive_parser.add_argument("--packet-available", action="store_true")
     archive_parser.add_argument("--source-thread-id")
     archive_parser.add_argument("--source-host-id")
     archive_parser.add_argument(
         "--goal-status",
-        choices=("active", "complete", "blocked", "none", "unknown"),
+        choices=("active", "paused", "complete", "blocked", "none", "unknown"),
         required=True,
     )
     archive_parser.add_argument("--authorized", action="store_true")
@@ -465,7 +584,7 @@ def parser() -> argparse.ArgumentParser:
     result_destination.add_argument("--destination-regression", action="store_true")
     result_parser.add_argument(
         "--goal-status",
-        choices=("active", "complete", "blocked", "none", "unknown"),
+        choices=("active", "paused", "complete", "blocked", "none", "unknown"),
         required=True,
     )
     observed_result = result_parser.add_mutually_exclusive_group()
@@ -473,6 +592,9 @@ def parser() -> argparse.ArgumentParser:
     observed_result.add_argument("--failure")
     result_parser.set_defaults(run=archive_result)
 
+    usage_parser = commands.add_parser("usage", help="read actual usage from exact named rollout files; no savings inference")
+    usage_parser.add_argument("rollouts", nargs="+")
+    usage_parser.set_defaults(run=usage)
     return root
 
 

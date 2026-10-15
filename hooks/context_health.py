@@ -39,12 +39,18 @@ def load_state(path: Path) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {"schema_version": STATE_SCHEMA_VERSION, "compactions": 0}
+    if not isinstance(payload, dict):
+        return {"schema_version": STATE_SCHEMA_VERSION, "compactions": 0}
     if payload.get("schema_version") != STATE_SCHEMA_VERSION:
         return {"schema_version": STATE_SCHEMA_VERSION, "compactions": 0}
     compactions = payload.get("compactions", 0)
-    if not isinstance(compactions, int) or compactions < 0:
+    if type(compactions) is not int or compactions < 0:
         compactions = 0
-    return {"schema_version": STATE_SCHEMA_VERSION, "compactions": compactions}
+    return {
+        "schema_version": STATE_SCHEMA_VERSION, "compactions": compactions,
+        "turns_since_notice": max(0, payload.get("turns_since_notice", 0)) if type(payload.get("turns_since_notice", 0)) is int else 0,
+        "last_level": payload.get("last_level", 0) if type(payload.get("last_level", 0)) is int else 0,
+    }
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
@@ -69,26 +75,17 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
 
 
 def health_message(compactions: int, *, immediate: bool) -> str:
-    urgency = (
-        "Two or more compactions are now recorded: treat this as handoff-ready when "
-        "the user or applicable instructions provide authorization."
-        if compactions >= 2
-        else "One compaction is recorded: create or refresh a checkpoint and audit observed degradation signals."
-    )
-    timing = (
-        "Before any substantive continuation after this compaction"
-        if immediate
-        else "At the start of this user turn, before substantive work"
-    )
     return (
-        "CONTEXT HANDOFF HEALTH CHECK — lifecycle hook, not user-authored text. "
-        f"This root session has recorded {compactions} compaction(s). {timing}, use the "
-        "context-handoff skill and run its deterministic `assess` command with this "
-        "compaction count plus only genuinely observed degradation signals. "
-        f"{urgency} Reliance on a compacted summary, rereading because prior context is "
-        "unreliable, contradicted decisions, or context-caused rework are observable signals; "
-        "do not invent telemetry. Finish any active atomic operation before transfer, preserve "
-        "dirty state and evidence, and do not archive the source merely to hand off."
+        "CONTEXT HANDOFF HEALTH CHECK — lifecycle telemetry. "
+        f"This root session has recorded {compactions} compaction(s). "
+        "Use context-handoff assess at a safe checkpoint. Compaction alone or reading a "
+        "correct summary is not degradation. Default: checkpoint at 85% or any compaction; "
+        "handoff candidate at 95% plus one observed degradation, three compactions plus "
+        "one degradation, or two independent degradation signals. Apply the 60-minute "
+        "chain cooldown unless explicitly requested or two real quality failures occur. "
+        "Reuse an unchanged checkpoint; do not create a thread from this reminder alone. "
+        "Preserve Goal, scoped user authorization, runtime permission checks and evidence. "
+        "Archive the verified source when authorized; never claim token savings without data."
     )
 
 
@@ -97,6 +94,10 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
         emit({"systemMessage": "Context Handoff could not read lifecycle hook input."})
+        return 0
+
+    if not isinstance(payload, dict):
+        emit({})
         return 0
 
     event = payload.get("hook_event_name")
@@ -122,14 +123,24 @@ def main() -> int:
         state = load_state(path)
         state["compactions"] += 1
         state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        level = 2 if state["compactions"] >= 3 else 1
+        notify = level > state.get("last_level", 0)
+        if notify:
+            state["last_level"] = level
+            state["turns_since_notice"] = 0
         save_state(path, state)
-        emit(additional_context(event, health_message(state["compactions"], immediate=True)))
+        emit(additional_context(event, health_message(state["compactions"], immediate=True)) if notify else {})
         return 0
 
     if event == "UserPromptSubmit":
         state = load_state(path)
         if state["compactions"] > 0:
-            emit(additional_context(event, health_message(state["compactions"], immediate=False)))
+            state["turns_since_notice"] = state.get("turns_since_notice", 0) + 1
+            notify = state["turns_since_notice"] >= 8
+            if notify:
+                state["turns_since_notice"] = 0
+            save_state(path, state)
+            emit(additional_context(event, health_message(state["compactions"], immediate=False)) if notify else {})
         else:
             emit({})
         return 0

@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-14",
+  "status": "PASS",
+  "comparison": "One paired observed run; identical contract and source prompts except frozen implementation path; same model/settings/runtime and fresh source histories. Not a statistical average or monetary claim.",
+  "sample_size_pairs": 1,
+  "model": "gpt-6-astra",
+  "reasoning_effort": "high",
+  "initial_source_input_tokens": {
+    "before": 35636,
+    "after": 35631
+  },
+  "variants": {
+    "a": {
+      "usage": {
+        "input_tokens": 1599019,
+        "cached_input_tokens": 1471488,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 15059,
+        "reasoning_output_tokens": 852,
+        "total_tokens": 1614078,
+        "uncached_input_tokens": 127531
+      },
+      "usage_advances": 29,
+      "all_gates_passed": true,
+      "source_cutoff": "2026-10-14T13:55:42.641Z",
+      "destination_cutoff": "2026-10-14T13:58:13.509Z",
+      "skill_sha256": "07630859d00e29b98c3ff0c115fd1ae94e0e613a35d0a5fa2d5bf99ab2d6848e"
+    },
+    "b": {
+      "usage": {
+        "input_tokens": 1206335,
+        "cached_input_tokens": 1115904,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 13097,
+        "reasoning_output_tokens": 440,
+        "total_tokens": 1219432,
+        "uncached_input_tokens": 90431
+      },
+      "usage_advances": 23,
+      "all_gates_passed": true,
+      "source_cutoff": "2026-10-14T14:03:08.867Z",
+      "destination_cutoff": "2026-10-14T14:04:38.021Z",
+      "skill_sha256": "a10d6fb89c2cc8d801e8f340cb8a944d833e19383ca1809b62e2234e922a3e6c"
+    }
+  },
+  "difference_before_minus_after": {
+    "input_tokens": 392684,
+    "cached_input_tokens": 355584,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 1962,
+    "reasoning_output_tokens": 412,
+    "total_tokens": 394646,
+    "uncached_input_tokens": 37100
+  },
+  "total_token_reduction_percent": 24.450243420702098,
+  "acceptance_preserved": true,
+  "acceptance": [
+    "exact session identity and canonical contract",
+    "observed runtime permissions and owned-workspace write/read-back",
+    "native Goal absent on both sides",
+    "destination listed, unpinned and successfully opened",
+    "source archival only after verification and destination independent confirmation",
+    "recoverable source packet",
+    "usage boundaries and report read-back"
+  ],
+  "tests": {
+    "original": 30,
+    "added": 6,
+    "passed": 36
+  },
+  "cost_separation": {
+    "repair_regression_initial_setup_and_dispatch": {
+      "input_tokens": 1107693,
+      "cached_input_tokens": 1081728,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 10968,
+      "reasoning_output_tokens": 2799,
+      "total_tokens": 1118661,
+      "uncached_input_tokens": 25965
+    },
+    "failed_setup_trial": {
+      "input_tokens": 353212,
+      "cached_input_tokens": 317184,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 5855,
+      "reasoning_output_tokens": 498,
+      "total_tokens": 359067,
+      "uncached_input_tokens": 36028
+    },
+    "parent_observation_coordination_and_settlement": {
+      "input_tokens": 4360538,
+      "cached_input_tokens": 4321024,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 12982,
+      "reasoning_output_tokens": 5487,
+      "total_tokens": 4373520,
+      "uncached_input_tokens": 39514
+    },
+    "baseline_accepted_handoff": {
+      "input_tokens": 1599019,
+      "cached_input_tokens": 1471488,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 15059,
+      "reasoning_output_tokens": 852,
+      "total_tokens": 1614078,
+      "uncached_input_tokens": 127531
+    },
+    "optimized_accepted_handoff": {
+      "input_tokens": 1206335,
+      "cached_input_tokens": 1115904,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 13097,
+      "reasoning_output_tokens": 440,
+      "total_tokens": 1219432,
+      "uncached_input_tokens": 90431
+    },
+    "all_experiment_observed": {
+      "input_tokens": 8626797,
+      "cached_input_tokens": 8307328,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 57961,
+      "reasoning_output_tokens": 10076,
+      "total_tokens": 8684758,
+      "uncached_input_tokens": 319469
+    },
+    "parent_cutoff": "2026-10-14T14:05:36.810Z",
+    "repair_boundary": "2026-10-14T13:47:59.598Z",
+    "parent_scope_note": "Observer includes shared test-prompt format correction after failed setup and all coordination. Repair and observer boundaries are actual cumulative telemetry, not estimated per-command attribution. Later comparison-file generation/checks/final reply excluded from parent cost; all four accepted trial sessions include completed/archival cutoffs."
+  },
+  "limitations": [
+    "One pair only; scheduling and natural model variability remain.",
+    "Initial source input differs by 5 tokens (35636 vs 35631), not identical bitwise session IDs/paths.",
+    "Cache warmth differs; cached and uncached counts reported separately; no money claim.",
+    "Both native Goals were absent; active-Goal restoration is outside this case.",
+    "Local host only; no cloud/other-device claim.",
+    "Failed setup trial is not used to inflate baseline savings, but remains in total experimental cost.",
+    "Historical 2861713-token run is not the control because it included repairs and a much longer source history.",
+    "No observed amortization yet; one-time experiment expenditure exceeds the measured per-handoff difference."
+  ],
+  "provenance": "Sanitized summary of the locally retained paired-token-comparison.json; private task identifiers, transcripts, and filesystem paths are omitted."
+}

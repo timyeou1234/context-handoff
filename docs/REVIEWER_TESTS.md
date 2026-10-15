@@ -8,8 +8,8 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 
 - Setup: Install the complete plugin, review and trust its hook definition, then start a fresh synthetic task.
 - Event: Deliver a `SessionStart` lifecycle event with `source: compact`, followed by a later user turn in the same session.
-- Expected behavior: Before substantive continuation, Codex receives `CONTEXT HANDOFF HEALTH CHECK` with one observed compaction. The later user turn receives the reminder again without incrementing the count.
-- Expected result: The skill runs deterministic assessment, creates or refreshes a checkpoint, and audits only observed degradation signals. A second compact event reports two compactions and makes an authorized task handoff-ready.
+- Expected behavior: Before substantive continuation, Codex receives `CONTEXT HANDOFF HEALTH CHECK` with one observed compaction. The first seven subsequent user turns remain quiet; the eighth receives a reminder without incrementing the compaction count.
+- Expected result: The skill runs deterministic assessment, creates or refreshes a checkpoint, and audits only observed degradation signals. The second compaction stays quiet. The third emits a health check; three compactions only make a transfer candidate when at least one independent degradation signal is observed and the cooldown and safety checks pass. A correct compacted summary is not degradation.
 - Privacy boundary: Local plugin state contains no prompt, response, transcript, path, or raw session identifier and is removed on `SessionEnd`.
 
 ### 1. Explicit handoff at a safe checkpoint
@@ -21,8 +21,8 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 
 ### 2. Standing authorization at high context pressure
 
-- Prompt: "My standing preference authorizes fresh-thread handoffs. Assess 86,000 of 100,000 tokens and continue safely."
-- Expected behavior: Assessment returns `handoff-ready`; the skill reaches a safe checkpoint and transfers without requesting duplicate authorization.
+- Prompt: "My standing preference authorizes fresh-thread handoffs. Assess 95,000 of 100,000 tokens with one independently observed context failure and no previous transfer, and continue safely."
+- Expected behavior: Assessment returns `handoff-ready`; the skill reaches a safe checkpoint and transfers without requesting duplicate authorization. At 86,000 tokens alone, expect `checkpoint` instead. With a transfer 59 minutes ago, expect `handoff-deferred` unless an explicit request or two independent failures bypasses the cooldown.
 - Expected result: Acceptance criteria and verified/unverified evidence boundaries appear in the packet and destination restatement.
 - Fixture: Synthetic telemetry and a clean temporary repository.
 
@@ -68,12 +68,25 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Expected result: If exact placement is supported, the handoff proceeds normally. If it is not supported, no incompatible destination is created; the source reports `HANDOFF NEEDS COMPATIBLE WORKSPACE` and provides the validated copyable packet without requesting approval.
 - Fixture: A saved Git project whose source task is running from a distinct Codex worktree.
 
-### 9. Mobile/sidebar destination discoverability
+### 9. Local/cloud destination visibility without pinning
 
 - Prompt: "Handoff this task and make sure I can find the destination from my phone."
-- Expected behavior: After destination creation, the skill assigns a concise `Handoff: <goal>` title, pins the exact returned thread, and reads the thread inventory to confirm the same thread ID, host ID, and title in the pinned list.
+- Expected behavior: After destination creation, the skill assigns a concise `Handoff: <goal>` title, does not pin it, reads the local/cloud task inventory to confirm the exact identity and title (plus host for local tasks), and successfully opens the task.
 - Expected result: Source archival is eligible only after both `HANDOFF VERIFIED` and exact discoverability confirmation. The source checkpoint records the destination identity.
 - Fixture: A mock Codex surface exposing thread creation, title, pin, and list APIs plus a connected local host.
+
+### 10. Exact-session evidence and archived telemetry
+
+- Fixture: Synthetic rollout files with a known `session_meta.id`, both supported tool-call formats, correlated `get_goal` output, and increasing cumulative token counters.
+- Expected result: `handoff_evidence.py snapshot` returns the observed Goal and latest counters. Duplicate cumulative samples are not summed. After archival, only the same rollout basename is considered and the session ID is verified again. Missing optional counters remain unknown.
+- Failure cases: A different session ID, uncorrelated or quoted Goal assertions, malformed lines, inconsistent totals, or a counter decrease (including after a missing value) fail verification. No transcript text is emitted.
+
+### 11. Portable projectless local E2E
+
+- Fixture: A complete inline contract with a canonical hash, no repository dependency, and no native Goal.
+- Expected result: A fresh destination can use its own directory under ordinary permissions, verify the contract and exact identities, write and read back its sentinel, and observe Goal as absent. Source and destination independently check visibility and unpinned state; source opens the exact task and archives only after verified prerequisites. Destination independently confirms source archival and reports actual usage with cutoffs.
+- Limit: This does not establish active-Goal restoration, permission inheritance, cloud mirroring, or access from another device. Workspace-dependent tasks retain the exact-directory requirement.
+- Measured example: See `docs/benchmarks/2026-10-14-local-e2e.json`; both accepted runs passed the same gates. One observed 24.45% token reduction is not a guaranteed or monetary saving; repair/setup/observer costs remain separate.
 
 ## Negative cases
 
@@ -107,8 +120,8 @@ All cases use a temporary sample Git repository and synthetic task text. They re
 - Expected fallback: Stop immediately with `HANDOFF REGRESSION`, identify both paths, retain the source checkpoint and recovery packet, and provide the copyable fallback. Do not request approval and do not retry the blocked read.
 - Why not complete: Elevated approval cannot make a mismatched destination a verified continuation, and repeated prompts are a functional regression.
 
-### 6. Destination is not visible in the pinned inventory
+### 6. Destination cannot be listed or opened
 
-- Scenario: Creation succeeds, but title/pin mutation fails or the exact destination thread and host do not appear in the pinned read-back.
-- Expected fallback: Report `HANDOFF MOBILE VISIBILITY UNVERIFIED`, preserve the source and recovery packet, and provide the known destination title, thread ID, and host ID. Do not archive the source or claim that mobile can see it.
-- Why not complete: A created task is not a usable mobile handoff until its discoverability is verified. If the local host is disconnected from mobile Remote, state that external requirement instead of rerouting the work.
+- Scenario: Creation succeeds, but title/list read-back or opening fails in the chosen local/cloud location.
+- Expected fallback: Report `HANDOFF VISIBILITY UNVERIFIED`, preserve the source and recovery packet, and provide the known destination title, thread ID, and host ID. Do not archive the source or claim that mobile can see it.
+- Why not complete: A created task is not a usable handoff until its task-list visibility and opening are verified. If the local host is disconnected from mobile Remote, state that external requirement instead of rerouting the work.

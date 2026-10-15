@@ -74,19 +74,19 @@ class ContextHandoffTests(unittest.TestCase):
     def test_context_boundaries(self) -> None:
         self.assertEqual(
             self.decision(
-                "--used-tokens", "69000", "--context-window", "100000"
+                "--used-tokens", "84000", "--context-window", "100000"
             ),
             "continue",
         )
         self.assertEqual(
             self.decision(
-                "--used-tokens", "70000", "--context-window", "100000"
+                "--used-tokens", "85000", "--context-window", "100000"
             ),
             "checkpoint",
         )
         self.assertEqual(
             self.decision(
-                "--used-tokens", "85000", "--context-window", "100000"
+                "--used-tokens", "95000", "--context-window", "100000", "--degradation-signals", "1"
             ),
             "handoff-needs-authorization",
         )
@@ -94,12 +94,71 @@ class ContextHandoffTests(unittest.TestCase):
     def test_compaction_authorization_and_unsafe_state(self) -> None:
         self.assertEqual(
             self.decision("--compactions", "2", "--standing-authorization"),
-            "handoff-ready",
+            "checkpoint",
         )
         self.assertEqual(
             self.decision("--requested", "--unsafe", "test is running"),
             "handoff-deferred",
         )
+
+    def test_cooldown_and_real_degradation(self):
+        base = ("--compactions", "3", "--degradation-signals", "1", "--standing-authorization")
+        self.assertEqual(self.decision(*base), "handoff-ready")
+        self.assertEqual(self.decision(*base, "--minutes-since-handoff", "59"), "handoff-deferred")
+        self.assertEqual(self.decision(*base, "--minutes-since-handoff", "60"), "handoff-ready")
+        self.assertEqual(self.decision(*base, "--prior-handoff-unknown"), "handoff-deferred")
+        self.assertEqual(self.decision("--compactions", "8", "--standing-authorization"), "checkpoint")
+        self.assertEqual(self.decision("--used-tokens", "99000", "--context-window", "100000", "--standing-authorization"), "checkpoint")
+        self.assertEqual(self.decision("--requested", "--minutes-since-handoff", "1"), "handoff-ready")
+        self.assertEqual(self.decision("--degradation-signals", "2", "--standing-authorization", "--minutes-since-handoff", "1"), "handoff-ready")
+        self.assertEqual(self.decision("--degradation-signals", "2", "--standing-authorization", "--unsafe", "upload"), "handoff-deferred")
+        self.assertNotEqual(run_cli("assess", "--minutes-since-handoff", "nan").returncode, 0)
+
+    def test_continuity_fields_cannot_be_omitted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            packet = Path(directory) / "handoff.md"
+            run_cli("template", "--output", str(packet))
+            completed = self.complete_packet(packet.read_text())
+            for label in ("Objective", "Goal authorization", "Remaining budget", "Authorized scope and evidence", "Runtime permissions", "Chain and prior transfer", "Usage evidence"):
+                packet.write_text(re.sub(rf"(?m)^- {re.escape(label)}:.*\n", "", completed))
+                result = run_cli("validate", str(packet))
+                self.assertNotEqual(result.returncode, 0, label)
+
+    def test_archive_requires_goal_and_permissions_verification(self):
+        result = run_cli("archive-plan", "--destination-verified", "--destination-discoverable", "--destination-opened", "--destination-thread-id", "destination-real-123", "--destination-location", "local", "--destination-host-id", "local", "--packet-available", "--source-thread-id", "real", "--source-host-id", "local", "--goal-status", "active", "--standing-preference", "--api-available", "--confirmation-available")
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["archive"])
+        self.assertIn("destination Goal continuity is unverified", payload["blockers"])
+        self.assertIn("required destination permissions are unverified", payload["blockers"])
+
+    def test_usage_reads_latest_cumulative_counter_without_double_counting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rollout.jsonl"
+            def event(n):
+                return {"type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"input_tokens": n, "cached_input_tokens": n // 2, "output_tokens": 10, "reasoning_output_tokens": 2, "total_tokens": n + 10}}}}
+            path.write_text("\n".join(json.dumps(e) for e in [{"type": "session_meta", "payload": {"id": "exact-session"}}, event(100), event(200)]))
+            result = run_cli("usage", str(path))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["totals"]["input_tokens"], 200)
+            self.assertEqual(report["totals"]["uncached_input_tokens"], 100)
+            self.assertIsNone(report["savings_percent"])
+            self.assertNotEqual(run_cli("usage", str(path), str(path)).returncode, 0)
+            copy = Path(directory) / "copy.jsonl"; copy.write_text(path.read_text())
+            self.assertNotEqual(run_cli("usage", str(path), str(copy)).returncode, 0)
+            with path.open("a") as f: f.write("\n" + json.dumps(event(50)))
+            report = json.loads(run_cli("usage", str(path)).stdout)
+            self.assertIsNone(report["totals"]["input_tokens"])
+            self.assertTrue(report["sessions"][0]["counter_reset"])
+
+    def test_usage_missing_or_partial_data_is_not_zero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rollout.jsonl"
+            for content in ("", '{"type":"event_msg","payload":{"type":"token_count","info":null}}', '{"truncated":'):
+                path.write_text(content)
+                result = run_cli("usage", str(path))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIsNone(json.loads(result.stdout)["totals"]["input_tokens"])
 
     def test_packet_template_must_be_completed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -183,12 +242,13 @@ class ContextHandoffTests(unittest.TestCase):
         self.assertIn("do not open the source-side backup packet", skill)
         self.assertIn("Do not request approval and do not retry", skill)
 
-    def test_skill_requires_verified_mobile_discoverability(self) -> None:
+    def test_skill_requires_visible_openable_destination_without_pinning(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
         self.assertIn("Handoff: <short goal>", skill)
-        self.assertIn("pin that exact destination thread", skill)
-        self.assertIn("HANDOFF MOBILE VISIBILITY UNVERIFIED", skill)
-        self.assertIn("same thread ID, host ID, and title", skill)
+        self.assertIn("Do not pin the destination", skill)
+        self.assertIn("HANDOFF VISIBILITY UNVERIFIED", skill)
+        self.assertIn("task inventory", skill)
+        self.assertIn("successfully open that task", skill)
 
     def test_packet_requires_explicit_source_goal_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -202,7 +262,7 @@ class ContextHandoffTests(unittest.TestCase):
             result = run_cli("validate", str(packet))
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
-                "Source lifecycle Goal status must be active, complete, blocked, none, or unknown",
+                "Source lifecycle Goal status must be active, paused, complete, blocked, none, or unknown",
                 result.stdout,
             )
 
@@ -219,9 +279,9 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_allows_verified_authorized_recoverable_handoff(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-verified",
-            "--destination-discoverable",
+            "--destination-discoverable", "--destination-opened", "--destination-thread-id", "destination-real-123", "--destination-location", "local", "--destination-host-id", "local",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -239,7 +299,7 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_rejects_unverified_or_unsafe_handoff(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -257,9 +317,9 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_requires_real_ids_authorization_packet_and_api(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-verified",
-            "--destination-discoverable",
+            "--destination-discoverable", "--destination-opened", "--destination-thread-id", "destination-real-123", "--destination-location", "local", "--destination-host-id", "local",
             "--goal-status",
             "active",
         )
@@ -286,7 +346,7 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_never_closes_on_destination_regression(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-regression",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
@@ -303,9 +363,9 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_treats_observed_archive_as_idempotent_success(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-verified",
-            "--destination-discoverable",
+            "--destination-discoverable", "--destination-opened", "--destination-thread-id", "destination-real-123", "--destination-location", "local", "--destination-host-id", "local",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -320,9 +380,9 @@ class ContextHandoffTests(unittest.TestCase):
 
     def test_archive_plan_accepts_documented_standing_preference(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-verified",
-            "--destination-discoverable",
+            "--destination-discoverable", "--destination-opened", "--destination-thread-id", "destination-real-123", "--destination-location", "local", "--destination-host-id", "local",
             "--packet-available",
             "--source-thread-id", "thread-real-123",
             "--source-host-id", "host-real-456",
@@ -335,9 +395,9 @@ class ContextHandoffTests(unittest.TestCase):
         self.assertTrue(payload["archive"])
         self.assertEqual(payload["decision"], "archive-ready")
 
-    def test_archive_plan_keeps_source_when_mobile_visibility_is_unverified(self) -> None:
+    def test_archive_plan_keeps_source_when_visibility_is_unverified(self) -> None:
         result = run_cli(
-            "archive-plan",
+            "archive-plan", "--goal-continuity-verified", "--permissions-verified",
             "--destination-verified",
             "--packet-available",
             "--source-thread-id",
@@ -354,9 +414,34 @@ class ContextHandoffTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertFalse(payload["archive"])
         self.assertEqual(
-            payload["lifecycle_state"], "HANDOFF MOBILE VISIBILITY UNVERIFIED"
+            payload["lifecycle_state"], "HANDOFF VISIBILITY UNVERIFIED"
         )
         self.assertTrue(payload["goal_auto_resume_risk"])
+
+    def test_local_and_cloud_visibility_require_inventory_and_successful_open(self):
+        base = ["archive-plan", "--destination-verified", "--goal-continuity-verified", "--permissions-verified", "--packet-available", "--source-thread-id", "source-real", "--source-host-id", "local", "--goal-status", "active", "--standing-preference", "--api-available", "--confirmation-available"]
+        for location in ("local", "cloud"):
+            with self.subTest(location=location):
+                visibility = ["--destination-discoverable", "--destination-opened", "--destination-thread-id", "dest-real", "--destination-location", location]
+                if location == "local":
+                    visibility += ["--destination-host-id", "local"]
+                ready = json.loads(run_cli(*(base + visibility)).stdout)
+                self.assertTrue(ready["archive"])
+                self.assertTrue(ready["visibility_verified"])
+                self.assertEqual(ready["destination_location"], location)
+                # Creation, a title or pin is insufficient without both read-back and open.
+                for flag in ("--destination-discoverable", "--destination-opened"):
+                    incomplete = [item for item in visibility if item != flag]
+                    result = json.loads(run_cli(*(base + incomplete)).stdout)
+                    self.assertFalse(result["archive"])
+                    self.assertEqual(result["lifecycle_state"], "HANDOFF VISIBILITY UNVERIFIED")
+                for flag in ("--destination-thread-id", "--destination-location") + (("--destination-host-id",) if location == "local" else ()):
+                    incomplete = visibility.copy()
+                    index = incomplete.index(flag)
+                    del incomplete[index:index + 2]
+                    result = json.loads(run_cli(*(base + incomplete)).stdout)
+                    self.assertFalse(result["archive"])
+                    self.assertFalse(result["visibility_verified"])
 
     def test_archive_result_requires_observed_confirmation(self) -> None:
         confirmed = run_cli(
@@ -444,7 +529,7 @@ class ContextHandoffTests(unittest.TestCase):
             self.assertIn("$PLUGIN_ROOT/hooks/context_health.py", command)
         self.assertNotIn("Stop", hooks)
 
-    def test_hook_records_compactions_and_reminds_each_later_turn(self) -> None:
+    def test_hook_notifies_on_severity_change_and_throttles_later_turns(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             plugin_data = Path(directory)
             compact = {
@@ -459,7 +544,7 @@ class ContextHandoffTests(unittest.TestCase):
             first_output = json.loads(first.stdout)
             first_context = first_output["hookSpecificOutput"]["additionalContext"]
             self.assertIn("recorded 1 compaction(s)", first_context)
-            self.assertIn("create or refresh a checkpoint", first_context)
+            self.assertIn("Compaction alone", first_context)
 
             prompt = run_hook(
                 {
@@ -471,18 +556,15 @@ class ContextHandoffTests(unittest.TestCase):
                 },
                 plugin_data,
             )
-            prompt_context = json.loads(prompt.stdout)["hookSpecificOutput"][
-                "additionalContext"
-            ]
-            self.assertIn("At the start of this user turn", prompt_context)
-            self.assertIn("recorded 1 compaction(s)", prompt_context)
-
+            self.assertEqual(json.loads(prompt.stdout), {})
             second = run_hook(compact, plugin_data)
-            second_context = json.loads(second.stdout)["hookSpecificOutput"][
-                "additionalContext"
-            ]
-            self.assertIn("recorded 2 compaction(s)", second_context)
-            self.assertIn("treat this as handoff-ready", second_context)
+            self.assertEqual(json.loads(second.stdout), {})
+            third = run_hook(compact, plugin_data)
+            third_context = json.loads(third.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("recorded 3 compaction(s)", third_context)
+            for turn in range(8):
+                notice = json.loads(run_hook({"session_id": "thread-sensitive-123", "hook_event_name": "UserPromptSubmit"}, plugin_data).stdout)
+                self.assertEqual(bool(notice), turn == 7)
 
             state_files = list((plugin_data / "context-health").glob("*.json"))
             self.assertEqual(len(state_files), 1)

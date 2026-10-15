@@ -7,7 +7,7 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 - Name: Context Handoff
 - Category: Productivity
 - Short description: Continue work in fresh threads
-- Long description: Detect compaction with a trusted local lifecycle hook, then safely checkpoint and continue long-running Codex work in a fresh verified thread. Preserve language, acceptance criteria, evidence, workspace identity, and open risks. Preflight exact workspace compatibility to prevent approval loops, and verify a titled, pinned destination so handoffs remain discoverable from desktop and mobile.
+- Long description: Detect context pressure with throttled local lifecycle checks, then safely continue work in a fresh verified thread. Preserve language, Goal state, scoped authorization, runtime permission checks and evidence. Verify destination visibility and opening without pinning before authorized source archival. Record exact-session token usage without assuming savings.
 - Developer: Tim Yu
 - Website: https://github.com/timyeou1234/context-handoff
 - Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md (enter in the portal; the supported plugin manifest schema has no support URL field)
@@ -23,9 +23,15 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 2. Prepare a safe handoff packet for this long-running Codex task.
 3. Check context health and hand off only if a fresh thread is warranted.
 
-## Release notes — 0.3.4
+## Release notes — 0.3.5
 
-Makes fresh handoff destinations reliably discoverable in the Codex sidebar and on mobile Remote. The workflow assigns a concise `Handoff: <goal>` title, pins the exact returned thread, and verifies the same thread ID, host ID, and title in the pinned inventory before source archival. If that read-back fails, it reports `HANDOFF MOBILE VISIBILITY UNVERIFIED`, preserves the source, and returns the known destination identity. It also explains that local/worktree tasks require mobile Remote to connect to the same host. The 0.3.3 exact-workspace guard remains intact: incompatible routes never loop on elevated approval. No MCP server, hosted service, authentication, or reviewer credentials are used.
+Reduces repeated handoff coordination while preserving verification and recoverability. Health checks are throttled to the first and third compaction, then every eight user turns; handoff requires the documented degradation thresholds and a 60-minute chain cooldown unless explicitly requested or two independent quality failures occur. Packets carry Goal, authorization, permission and budget continuity; destination visibility, successful opening and authorized source archival remain required.
+
+Adds exact-session evidence snapshots, correlated Goal tool results, archive-aware rollout lookup, monotonic token validation and separate interval accounting. Required identity, permission, visibility and archival checks are unchanged. The portable projectless route is limited to complete inline inputs and does not relax exact-workspace requirements for repository work.
+
+A single local paired E2E measurement observed 1,614,078 versus 1,219,432 tokens (24.45% fewer for the accepted handoff); this is not a guaranteed reduction or a monetary claim. One-time repair, failed setup and observer costs are reported separately. Both Goals were absent, so active-Goal restoration and cross-device access were not exercised. All 36 regression tests passed. See the README and sanitized benchmark data for evidence and limits.
+
+No MCP server, hosted service, authentication or reviewer credentials are required. This release is available through the repository/local marketplace; public directory approval or publication is a separate portal action.
 
 ## USER-REQUIRED portal steps
 
