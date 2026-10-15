@@ -1,6 +1,8 @@
 # Context Handoff for Codex
 
-Current release: **0.3.5**.
+Current release: **0.3.6**.
+
+OpenAI public directory status (2026-10-15): the published listing remains **0.3.4**. The 0.3.5 update was uploaded, but the portal blocked submission because the package contains lifecycle hooks and skills-only submissions are currently unavailable. Version 0.3.6 adds the supported `interface.supportURL` field to address a separate metadata finding. Hooks and acceptance criteria are preserved; GitHub releases and local marketplace updates do not imply public publication.
 
 `context-handoff` is a Codex plugin and skill for moving an in-progress task into a genuinely fresh thread when context pressure threatens continuity. The complete plugin uses a local lifecycle hook to detect root-session compaction before the next model continuation, then the skill preserves the reply language, acceptance criteria, verified evidence, workspace identity, open risks, and the next action instead of copying the full conversation.
 
@@ -63,7 +65,7 @@ codex plugin add context-handoff@context-handoff-local
 codex plugin list --marketplace context-handoff-local --json
 ```
 
-Check that the installed version is `0.3.5`. A standalone skill installation is separate: update the full `skills/context-handoff/` directory, including both scripts and agent metadata. Do not copy only `SKILL.md`. Restart the desktop app if it still shows the previous local version; review any changed hook trust prompt in `/hooks`. Local installation and a GitHub release do not establish public Plugins Directory approval or publication.
+Check that the installed version is `0.3.6`. A standalone skill installation is separate: update the full `skills/context-handoff/` directory, including both scripts and agent metadata. Do not copy only `SKILL.md`. Restart the desktop app if it still shows the previous local version; review any changed hook trust prompt in `/hooks`. Local installation and a GitHub release do not establish public Plugins Directory approval or publication.
 
 ## Use
 

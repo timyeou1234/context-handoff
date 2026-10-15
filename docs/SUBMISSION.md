@@ -10,7 +10,7 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 - Long description: Detect context pressure with throttled local lifecycle checks, then safely continue work in a fresh verified thread. Preserve language, Goal state, scoped authorization, runtime permission checks and evidence. Verify destination visibility and opening without pinning before authorized source archival. Record exact-session token usage without assuming savings.
 - Developer: Tim Yu
 - Website: https://github.com/timyeou1234/context-handoff
-- Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md (enter in the portal; the supported plugin manifest schema has no support URL field)
+- Support: https://github.com/timyeou1234/context-handoff/blob/main/SUPPORT.md (provided by `interface.supportURL` in the package manifest)
 - Privacy: https://github.com/timyeou1234/context-handoff/blob/main/PRIVACY.md
 - Terms: https://github.com/timyeou1234/context-handoff/blob/main/TERMS.md
 - Directory logo: `assets/logo.png` (512 × 512 PNG; current portal minimum is 256 × 256)
@@ -22,6 +22,14 @@ These materials prepare a draft submission; they do not claim OpenAI review, app
 1. Checkpoint this task and continue it in a fresh verified thread.
 2. Prepare a safe handoff packet for this long-running Codex task.
 3. Check context health and hand off only if a fresh thread is warranted.
+
+## Release notes — 0.3.6
+
+Adds the public submission `interface.supportURL` field. No skill, hook, or acceptance behavior changes from 0.3.5.
+
+### Observed public submission status — 2026-10-15
+
+The existing public listing remains published at 0.3.4. Uploading 0.3.5 created a draft with blocking findings: hooks cannot be submitted, skills-only submissions are currently unavailable, and Support URL was missing. Version 0.3.6 repairs the missing URL. The first two findings require platform resolution; removing hooks would weaken the accepted automatic lifecycle behavior. Do not claim this version is publicly published until the portal confirms publication.
 
 ## Release notes — 0.3.5
 
